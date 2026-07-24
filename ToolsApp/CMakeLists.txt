@@ -43,5 +43,3 @@ target_include_directories(AtariStudio
         include
         core
 )
-
-add_subdirectory(tools/TestApp)
