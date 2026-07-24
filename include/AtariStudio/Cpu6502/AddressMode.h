@@ -5,30 +5,27 @@
 namespace atari::cpu6502
 {
 
-/// <summary>
-/// 6502 addressing modes.
-/// </summary>
-enum class AddressMode : std::uint8_t
-{
-    Implied,            // IMP
-    Accumulator,        // A
-    Immediate,          // #$44
+    enum class AddressMode : std::uint8_t
+    {
+        Implied,
+        Accumulator,
 
-    ZeroPage,           // $44
-    ZeroPageX,          // $44,X
-    ZeroPageY,          // $44,Y
+        Immediate,
 
-    Relative,           // branch
+        ZeroPage,
+        ZeroPageX,
+        ZeroPageY,
 
-    Absolute,           // $4400
-    AbsoluteX,          // $4400,X
-    AbsoluteY,          // $4400,Y
+        Relative,
 
-    Indirect,           // ($4400)
+        Absolute,
+        AbsoluteX,
+        AbsoluteY,
 
-    IndexedIndirect,    // ($44,X)
+        Indirect,
 
-    IndirectIndexed     // ($44),Y
-};
+        IndexedIndirect,   // ($44,X)
+        IndirectIndexed    // ($44),Y
+    };
 
-}
+} // namespace atari::cpu6502
