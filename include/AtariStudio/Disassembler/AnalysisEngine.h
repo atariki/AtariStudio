@@ -5,6 +5,7 @@
 
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/Types.h>
+
 #include <AtariStudio/Disassembler/BasicBlockAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
@@ -13,6 +14,7 @@
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
 #include <AtariStudio/Disassembler/DominatorAnalyzer.h>
+#include <AtariStudio/Disassembler/NaturalLoopAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
 
 namespace atari
@@ -20,20 +22,49 @@ namespace atari
 
 struct AnalysisEngineResult
 {
+    //
+    // Control flow + relocation.
+    //
     ControlFlowAnalysisResult controlFlow;
 
+    //
+    // Symbols / XREF / relocation metadata.
+    //
     DisassemblyMetadata metadata;
 
+    //
+    // CODE / DATA regions.
+    //
     std::vector<CodeDataRegion> regions;
 
+    //
+    // Routines.
+    //
     RoutineAnalysisResult routines;
 
+    //
+    // Basic blocks.
+    //
     BasicBlockAnalysisResult basicBlocks;
 
+    //
+    // Per-routine control-flow graphs.
+    //
     ControlFlowGraphAnalysisResult graphs;
 
+    //
+    // Dominator trees + back edges.
+    //
     DominatorAnalysisResult dominators;
 
+    //
+    // Natural loops.
+    //
+    NaturalLoopAnalysisResult loops;
+
+    //
+    // Final listing.
+    //
     DisassemblyListing listing;
 
     std::size_t cfgInstructionCount = 0;
@@ -106,6 +137,20 @@ struct AnalysisEngineResult
     }
 
     [[nodiscard]]
+    std::size_t NaturalLoopCount() const noexcept
+    {
+        return
+            loops.LoopCount();
+    }
+
+    [[nodiscard]]
+    std::size_t LoopExitCount() const noexcept
+    {
+        return
+            loops.ExitCount();
+    }
+
+    [[nodiscard]]
     std::size_t ListingRowCount() const noexcept
     {
         return
@@ -126,6 +171,9 @@ public:
         ResetAnalysisState(
             project);
 
+        //
+        // Initial entry points.
+        //
         std::vector<u16> entryPoints;
 
         if (project.RunAddress() != 0)
@@ -143,8 +191,10 @@ public:
         }
 
         //
+        // =================================================
         // Phase 1:
         // Control flow + relocation.
+        // =================================================
         //
         ControlFlowAnalyzer
             controlFlowAnalyzer;
@@ -159,8 +209,10 @@ public:
                 instructionAddresses.size();
 
         //
+        // =================================================
         // Phase 2:
         // Disconnected code islands.
+        // =================================================
         //
         CodeIslandAnalyzer
             codeIslandAnalyzer;
@@ -175,16 +227,20 @@ public:
             result.cfgInstructionCount;
 
         //
+        // =================================================
         // Phase 3:
         // Symbols + XREF.
+        // =================================================
         //
         result.metadata.Build(
             project,
             result.controlFlow);
 
         //
+        // =================================================
         // Phase 4:
         // CODE / DATA classification.
+        // =================================================
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -194,8 +250,10 @@ public:
                 project);
 
         //
+        // =================================================
         // Phase 5:
         // Routines.
+        // =================================================
         //
         RoutineAnalyzer
             routineAnalyzer;
@@ -208,8 +266,10 @@ public:
                 result.regions);
 
         //
+        // =================================================
         // Phase 6:
         // Basic blocks.
+        // =================================================
         //
         BasicBlockAnalyzer
             basicBlockAnalyzer;
@@ -221,8 +281,10 @@ public:
                 result.routines);
 
         //
+        // =================================================
         // Phase 7:
         // CFG graph model.
+        // =================================================
         //
         ControlFlowGraphBuilder
             graphBuilder;
@@ -232,8 +294,10 @@ public:
                 result.basicBlocks);
 
         //
+        // =================================================
         // Phase 8:
         // Dominators + back edges.
+        // =================================================
         //
         DominatorAnalyzer
             dominatorAnalyzer;
@@ -243,8 +307,24 @@ public:
                 result.graphs);
 
         //
+        // =================================================
         // Phase 9:
+        // Natural loops.
+        // =================================================
+        //
+        NaturalLoopAnalyzer
+            naturalLoopAnalyzer;
+
+        result.loops =
+            naturalLoopAnalyzer.Analyze(
+                result.graphs,
+                result.dominators);
+
+        //
+        // =================================================
+        // Phase 10:
         // Listing.
+        // =================================================
         //
         result.listing.Build(
             project,

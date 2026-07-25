@@ -6,7 +6,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include <iterator>
 
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
@@ -15,10 +14,6 @@
 
 namespace
 {
-
-// ============================================================
-// Segment helpers
-// ============================================================
 
 const char* SegmentTypeToString(
     atari::SegmentType type)
@@ -57,10 +52,6 @@ const char* SegmentTypeToString(
     }
 }
 
-// ============================================================
-// Edge helpers
-// ============================================================
-
 const char* BasicBlockEdgeTypeToString(
     atari::BasicBlockEdgeType type)
 {
@@ -98,10 +89,6 @@ const char* GraphEdgeTypeToString(
         return "?";
     }
 }
-
-// ============================================================
-// Address helpers
-// ============================================================
 
 void PrintAddress(
     atari::u16 address)
@@ -155,10 +142,6 @@ void PrintAddressList(
             addresses[i]);
     }
 }
-
-// ============================================================
-// Relocation
-// ============================================================
 
 void PrintRelocationMap(
     const atari::AnalysisEngineResult& analysis)
@@ -219,10 +202,6 @@ void PrintRelocationMap(
             << " bytes)\n";
     }
 }
-
-// ============================================================
-// Routines
-// ============================================================
 
 void PrintRoutines(
     const atari::AnalysisEngineResult& analysis)
@@ -294,14 +273,14 @@ void PrintRoutines(
                  i < routine.callees.size();
                  ++i)
             {
-                const auto& callee =
-                    routine.callees[i];
-
                 if (i != 0)
                 {
                     std::cout
                         << ", ";
                 }
+
+                const auto& callee =
+                    routine.callees[i];
 
                 if (callee.type ==
                     atari::RoutineCalleeType::
@@ -337,10 +316,6 @@ void PrintRoutines(
     }
 }
 
-// ============================================================
-// Basic Blocks
-// ============================================================
-
 void PrintBasicBlocks(
     const atari::AnalysisEngineResult& analysis)
 {
@@ -348,14 +323,6 @@ void PrintBasicBlocks(
         << "\n=====================================\n"
         << " Basic Blocks\n"
         << "=====================================\n";
-
-    if (analysis.basicBlocks.routines.empty())
-    {
-        std::cout
-            << "\nNo basic blocks detected.\n";
-
-        return;
-    }
 
     for (const auto& routine :
          analysis.basicBlocks.routines)
@@ -377,14 +344,12 @@ void PrintBasicBlocks(
         for (const auto& block :
              routine.blocks)
         {
-            std::cout
-                << "  ";
+            std::cout << "  ";
 
             PrintAddress(
                 block.beginAddress);
 
-            std::cout
-                << " - ";
+            std::cout << " - ";
 
             PrintAddress(
                 block.endAddress);
@@ -415,14 +380,14 @@ void PrintBasicBlocks(
                      i < block.successors.size();
                      ++i)
                 {
-                    const auto& edge =
-                        block.successors[i];
-
                     if (i != 0)
                     {
                         std::cout
                             << ", ";
                     }
+
+                    const auto& edge =
+                        block.successors[i];
 
                     std::cout
                         << BasicBlockEdgeTypeToString(
@@ -439,10 +404,6 @@ void PrintBasicBlocks(
     }
 }
 
-// ============================================================
-// Control Flow Graphs
-// ============================================================
-
 void PrintControlFlowGraphs(
     const atari::AnalysisEngineResult& analysis)
 {
@@ -450,14 +411,6 @@ void PrintControlFlowGraphs(
         << "\n=====================================\n"
         << " Control Flow Graphs\n"
         << "=====================================\n";
-
-    if (analysis.graphs.routines.empty())
-    {
-        std::cout
-            << "\nNo control flow graphs detected.\n";
-
-        return;
-    }
 
     for (const auto& graph :
          analysis.graphs.routines)
@@ -517,8 +470,7 @@ void PrintControlFlowGraphs(
             PrintAddressList(
                 node.successors);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
 
         std::cout
@@ -549,16 +501,11 @@ void PrintControlFlowGraphs(
                 PrintAddress(
                     edge.targetAddress);
 
-                std::cout
-                    << '\n';
+                std::cout << '\n';
             }
         }
     }
 }
-
-// ============================================================
-// Dominator Analysis
-// ============================================================
 
 void PrintDominators(
     const atari::AnalysisEngineResult& analysis)
@@ -567,14 +514,6 @@ void PrintDominators(
         << "\n=====================================\n"
         << " Dominator Analysis\n"
         << "=====================================\n";
-
-    if (analysis.dominators.routines.empty())
-    {
-        std::cout
-            << "\nNo dominator data.\n";
-
-        return;
-    }
 
     for (const auto& routine :
          analysis.dominators.routines)
@@ -635,8 +574,7 @@ void PrintDominators(
             PrintAddressList(
                 node.dominators);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
 
         std::cout
@@ -674,9 +612,116 @@ void PrintDominators(
     }
 }
 
-// ============================================================
-// Listing
-// ============================================================
+void PrintNaturalLoops(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Natural Loops\n"
+        << "=====================================\n";
+
+    for (const auto& routine :
+         analysis.loops.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.routineName
+            << "  ";
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  loops="
+            << routine.loops.size()
+            << '\n';
+
+        if (routine.loops.empty())
+        {
+            std::cout
+                << "  none\n";
+
+            continue;
+        }
+
+        for (const auto& loop :
+             routine.loops)
+        {
+            std::cout
+                << "  LOOP header=";
+
+            PrintAddress(
+                loop.headerAddress);
+
+            std::cout
+                << std::dec
+                << " blocks="
+                << loop.BlockCount()
+                << " latches="
+                << loop.LatchCount()
+                << " exits="
+                << loop.ExitCount();
+
+            if (loop.IsSelfLoop())
+            {
+                std::cout
+                    << " [self]";
+            }
+
+            std::cout
+                << "\n    latch: ";
+
+            PrintAddressList(
+                loop.latchAddresses);
+
+            std::cout
+                << "\n    blocks: ";
+
+            PrintAddressList(
+                loop.blockAddresses);
+
+            std::cout
+                << "\n    exits: ";
+
+            if (loop.exits.empty())
+            {
+                std::cout
+                    << "none";
+            }
+            else
+            {
+                for (std::size_t i = 0;
+                     i < loop.exits.size();
+                     ++i)
+                {
+                    if (i != 0)
+                    {
+                        std::cout
+                            << ", ";
+                    }
+
+                    const auto& exit =
+                        loop.exits[i];
+
+                    PrintAddress(
+                        exit.sourceAddress);
+
+                    std::cout
+                        << " --"
+                        << GraphEdgeTypeToString(
+                            exit.type)
+                        << "--> ";
+
+                    PrintAddress(
+                        exit.targetAddress);
+                }
+            }
+
+            std::cout << '\n';
+        }
+    }
+}
 
 void PrintCodeRow(
     const atari::DisassemblyListingRow& row)
@@ -690,8 +735,7 @@ void PrintCodeRow(
     PrintAddress(
         row.address);
 
-    std::cout
-        << "  ";
+    std::cout << "  ";
 
     for (const atari::u8 value :
          row.bytes)
@@ -730,8 +774,7 @@ void PrintCodeRow(
             << row.comment;
     }
 
-    std::cout
-        << '\n';
+    std::cout << '\n';
 }
 
 void PrintDataRow(
@@ -746,8 +789,7 @@ void PrintDataRow(
     PrintAddress(
         row.address);
 
-    std::cout
-        << "  ";
+    std::cout << "  ";
 
     for (const atari::u8 value :
          row.bytes)
@@ -763,8 +805,7 @@ void PrintDataRow(
             << ' ';
     }
 
-    std::cout
-        << '\n';
+    std::cout << '\n';
 }
 
 void PrintListing(
@@ -782,8 +823,7 @@ void PrintListing(
     for (const auto& region :
          analysis.listing.Regions())
     {
-        std::cout
-            << '\n';
+        std::cout << '\n';
 
         if (region.IsCode())
         {
@@ -831,10 +871,6 @@ void PrintListing(
 
 } // namespace
 
-// ============================================================
-// main
-// ============================================================
-
 int main(
     int argc,
     char* argv[])
@@ -857,7 +893,6 @@ int main(
         argv[1];
 
     atari::Project project;
-
     atari::XexLoader loader;
 
     std::cout
@@ -887,10 +922,6 @@ int main(
 
     std::cout
         << "XEX loaded successfully.\n\n";
-
-    // ========================================================
-    // Segments
-    // ========================================================
 
     const auto& segments =
         project.Segments();
@@ -942,13 +973,8 @@ int main(
                 << "  [OVERLAP]";
         }
 
-        std::cout
-            << '\n';
+        std::cout << '\n';
     }
-
-    // ========================================================
-    // RUN / INIT
-    // ========================================================
 
     std::cout
         << "\nRUN address:  ";
@@ -978,21 +1004,12 @@ int main(
             << "not set";
     }
 
-    std::cout
-        << '\n';
-
-    // ========================================================
-    // Project statistics
-    // ========================================================
+    std::cout << '\n';
 
     const auto statistics =
         atari::CalculateProjectStatistics(
             project);
 
-    //
-    // PrintAddress() leaves std::cout in HEX mode.
-    // All counters below must be decimal.
-    //
     std::cout
         << std::dec;
 
@@ -1034,10 +1051,6 @@ int main(
         << "  Total bytes:  "
         << statistics.totalBytes
         << '\n';
-
-    // ========================================================
-    // Analysis statistics
-    // ========================================================
 
     std::cout
         << std::dec;
@@ -1084,13 +1097,15 @@ int main(
         << "  Back edges:               "
         << analysis.BackEdgeCount()
         << '\n'
+        << "  Natural loops:            "
+        << analysis.NaturalLoopCount()
+        << '\n'
+        << "  Loop exits:               "
+        << analysis.LoopExitCount()
+        << '\n'
         << "  Listing rows:             "
         << analysis.ListingRowCount()
         << '\n';
-
-    // ========================================================
-    // Detailed output
-    // ========================================================
 
     PrintRelocationMap(
         analysis);
@@ -1107,17 +1122,11 @@ int main(
     PrintDominators(
         analysis);
 
+    PrintNaturalLoops(
+        analysis);
+
     PrintListing(
         analysis);
 
-    //
-    // Important:
-    //
-    // Do NOT add std::cin.get() here.
-    //
-    // TestApp must terminate automatically.
-    // Otherwise TestApp.exe remains locked and MSVC linker
-    // produces LNK1168 on the next build.
-    //
     return 0;
 }
