@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <filesystem>
 #include <iomanip>
 #include <iostream>
@@ -52,7 +53,8 @@ const char* SegmentTypeToString(
     }
 }
 
-void PrintAddress(atari::u16 address)
+void PrintAddress(
+    atari::u16 address)
 {
     std::cout
         << '$'
@@ -86,8 +88,7 @@ std::map<atari::u16, std::string> BuildLabels(
     std::map<atari::u16, std::string> labels;
 
     //
-    // Сначала создаём автоматические метки
-    // для всех целей переходов.
+    // Automatic labels for branch / JMP / JSR targets.
     //
     for (const auto address :
          analysis.targetAddresses)
@@ -97,7 +98,7 @@ std::map<atari::u16, std::string> BuildLabels(
     }
 
     //
-    // RUNAD имеет специальное имя.
+    // RUNAD gets a special name.
     //
     if (project.RunAddress() != 0)
     {
@@ -106,20 +107,14 @@ std::map<atari::u16, std::string> BuildLabels(
     }
 
     //
-    // INITAD также получает специальное имя.
+    // INITAD gets a special name.
     //
-    if (project.InitAddress() != 0)
-    {
-        //
-        // Если INITAD совпадает с RUNAD,
-        // RUN_ENTRY оставляем приоритетным.
-        //
-        if (project.InitAddress() !=
+    if (project.InitAddress() != 0 &&
+        project.InitAddress() !=
             project.RunAddress())
-        {
-            labels[project.InitAddress()] =
-                "INIT_ENTRY";
-        }
+    {
+        labels[project.InitAddress()] =
+            "INIT_ENTRY";
     }
 
     return labels;
@@ -161,18 +156,136 @@ void MarkReachedSegments(
 
         if (segment.name.empty())
         {
-            segment.name = "Reached code";
+            segment.name =
+                "Reached code";
         }
     }
 }
 
-void PrintInstruction(
+atari::u16 AbsoluteTarget(
     const atari::DisassembledInstruction& instruction)
 {
-    PrintAddress(instruction.address);
+    return static_cast<atari::u16>(
+        static_cast<atari::u16>(
+            instruction.bytes[1]) |
+        (static_cast<atari::u16>(
+            instruction.bytes[2]) << 8));
+}
+
+atari::u16 RelativeTarget(
+    const atari::DisassembledInstruction& instruction)
+{
+    const auto offset =
+        static_cast<std::int8_t>(
+            instruction.bytes[1]);
+
+    const std::int32_t target =
+        static_cast<std::int32_t>(
+            instruction.address) +
+        static_cast<std::int32_t>(
+            instruction.length) +
+        static_cast<std::int32_t>(
+            offset);
+
+    return static_cast<atari::u16>(
+        target);
+}
+
+std::string FormatInstructionWithLabels(
+    const atari::DisassembledInstruction& instruction,
+    const std::map<atari::u16, std::string>& labels)
+{
+    atari::u16 target = 0;
+    bool hasTarget = false;
+
+    switch (instruction.instruction)
+    {
+    //
+    // Conditional branches.
+    //
+    case atari::cpu6502::Instruction::BCC:
+    case atari::cpu6502::Instruction::BCS:
+    case atari::cpu6502::Instruction::BEQ:
+    case atari::cpu6502::Instruction::BMI:
+    case atari::cpu6502::Instruction::BNE:
+    case atari::cpu6502::Instruction::BPL:
+    case atari::cpu6502::Instruction::BVC:
+    case atari::cpu6502::Instruction::BVS:
+
+        target = RelativeTarget(
+            instruction);
+
+        hasTarget = true;
+        break;
+
+    //
+    // JSR always uses an absolute address.
+    //
+    case atari::cpu6502::Instruction::JSR:
+
+        target = AbsoluteTarget(
+            instruction);
+
+        hasTarget = true;
+        break;
+
+    //
+    // Only absolute JMP can be resolved directly.
+    //
+    case atari::cpu6502::Instruction::JMP:
+
+        if (instruction.addressMode ==
+            atari::cpu6502::AddressMode::Absolute)
+        {
+            target = AbsoluteTarget(
+                instruction);
+
+            hasTarget = true;
+        }
+
+        break;
+
+    default:
+        break;
+    }
+
+    if (!hasTarget)
+    {
+        return instruction.text;
+    }
+
+    const auto label =
+        labels.find(target);
+
+    //
+    // Target does not have a known label.
+    //
+    if (label == labels.end())
+    {
+        return instruction.text;
+    }
+
+    //
+    // Replace numeric operand with symbolic label.
+    //
+    return
+        instruction.mnemonic +
+        " " +
+        label->second;
+}
+
+void PrintInstruction(
+    const atari::DisassembledInstruction& instruction,
+    const std::map<atari::u16, std::string>& labels)
+{
+    PrintAddress(
+        instruction.address);
 
     std::cout << ": ";
 
+    //
+    // Machine-code bytes.
+    //
     for (std::size_t i = 0;
          i < instruction.length;
          ++i)
@@ -188,7 +301,7 @@ void PrintInstruction(
     }
 
     //
-    // Выравниваем колонку.
+    // Align mnemonic column.
     //
     for (std::size_t i = instruction.length;
          i < 3;
@@ -199,7 +312,9 @@ void PrintInstruction(
 
     std::cout
         << "  "
-        << instruction.text
+        << FormatInstructionWithLabels(
+            instruction,
+            labels)
         << '\n';
 }
 
@@ -277,14 +392,14 @@ int main(
             entryPoints);
 
     //
-    // Кодовые сегменты.
+    // Mark code segments discovered by analysis.
     //
     MarkReachedSegments(
         project,
         analysis);
 
     //
-    // Метки.
+    // Build symbolic labels.
     //
     const auto labels =
         BuildLabels(
@@ -315,11 +430,13 @@ int main(
             << i
             << "] ";
 
-        PrintAddress(segment.begin);
+        PrintAddress(
+            segment.begin);
 
         std::cout << " - ";
 
-        PrintAddress(segment.end);
+        PrintAddress(
+            segment.end);
 
         std::cout
             << "  "
@@ -340,16 +457,18 @@ int main(
 
         if (segment.overlapping)
         {
-            std::cout << "  [OVERLAP]";
+            std::cout
+                << "  [OVERLAP]";
         }
 
         std::cout << '\n';
     }
 
     //
-    // RUNAD / INITAD.
+    // RUNAD.
     //
-    std::cout << "\nRUN address:  ";
+    std::cout
+        << "\nRUN address:  ";
 
     if (project.RunAddress() != 0)
     {
@@ -358,10 +477,15 @@ int main(
     }
     else
     {
-        std::cout << "not set";
+        std::cout
+            << "not set";
     }
 
-    std::cout << "\nINIT address: ";
+    //
+    // INITAD.
+    //
+    std::cout
+        << "\nINIT address: ";
 
     if (project.InitAddress() != 0)
     {
@@ -370,11 +494,12 @@ int main(
     }
     else
     {
-        std::cout << "not set";
+        std::cout
+            << "not set";
     }
 
     //
-    // Statistics.
+    // Project statistics.
     //
     const auto statistics =
         atari::CalculateProjectStatistics(
@@ -408,7 +533,7 @@ int main(
         << '\n';
 
     //
-    // Analysis information.
+    // Control-flow information.
     //
     std::cout
         << "\n=====================================\n"
@@ -459,10 +584,6 @@ int main(
     for (const auto address :
          analysis.instructionAddresses)
     {
-        //
-        // Если текущий адрес имеет метку,
-        // выводим её перед инструкцией.
-        //
         const auto label =
             labels.find(address);
 
@@ -479,7 +600,9 @@ int main(
                 project.GetMemory(),
                 address);
 
-        PrintInstruction(instruction);
+        PrintInstruction(
+            instruction,
+            labels);
     }
 
     std::cout
