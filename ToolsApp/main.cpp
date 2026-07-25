@@ -3,10 +3,13 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
+#include <AtariStudio/Atari/AtariSymbols.h>
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
@@ -53,13 +56,13 @@ const char* SegmentTypeToString(
     }
 }
 
-void PrintAddress(
-    atari::u16 address)
+void PrintAddress(atari::u16 address)
 {
     std::cout
         << '$'
         << std::uppercase
         << std::hex
+        << std::right
         << std::setw(4)
         << std::setfill('0')
         << address;
@@ -87,9 +90,6 @@ std::map<atari::u16, std::string> BuildLabels(
 {
     std::map<atari::u16, std::string> labels;
 
-    //
-    // Automatic labels for branch / JMP / JSR targets.
-    //
     for (const auto address :
          analysis.targetAddresses)
     {
@@ -97,18 +97,12 @@ std::map<atari::u16, std::string> BuildLabels(
             MakeAutomaticLabel(address);
     }
 
-    //
-    // RUNAD gets a special name.
-    //
     if (project.RunAddress() != 0)
     {
         labels[project.RunAddress()] =
             "RUN_ENTRY";
     }
 
-    //
-    // INITAD gets a special name.
-    //
     if (project.InitAddress() != 0 &&
         project.InitAddress() !=
             project.RunAddress())
@@ -200,9 +194,6 @@ std::string FormatInstructionWithLabels(
 
     switch (instruction.instruction)
     {
-    //
-    // Conditional branches.
-    //
     case atari::cpu6502::Instruction::BCC:
     case atari::cpu6502::Instruction::BCS:
     case atari::cpu6502::Instruction::BEQ:
@@ -212,33 +203,27 @@ std::string FormatInstructionWithLabels(
     case atari::cpu6502::Instruction::BVC:
     case atari::cpu6502::Instruction::BVS:
 
-        target = RelativeTarget(
-            instruction);
+        target =
+            RelativeTarget(instruction);
 
         hasTarget = true;
         break;
 
-    //
-    // JSR always uses an absolute address.
-    //
     case atari::cpu6502::Instruction::JSR:
 
-        target = AbsoluteTarget(
-            instruction);
+        target =
+            AbsoluteTarget(instruction);
 
         hasTarget = true;
         break;
 
-    //
-    // Only absolute JMP can be resolved directly.
-    //
     case atari::cpu6502::Instruction::JMP:
 
         if (instruction.addressMode ==
             atari::cpu6502::AddressMode::Absolute)
         {
-            target = AbsoluteTarget(
-                instruction);
+            target =
+                AbsoluteTarget(instruction);
 
             hasTarget = true;
         }
@@ -254,37 +239,107 @@ std::string FormatInstructionWithLabels(
         return instruction.text;
     }
 
-    const auto label =
+    const auto iterator =
         labels.find(target);
 
-    //
-    // Target does not have a known label.
-    //
-    if (label == labels.end())
+    if (iterator == labels.end())
     {
         return instruction.text;
     }
 
-    //
-    // Replace numeric operand with symbolic label.
-    //
     return
         instruction.mnemonic +
         " " +
-        label->second;
+        iterator->second;
+}
+
+std::optional<atari::u16> ReferencedAddress(
+    const atari::DisassembledInstruction& instruction)
+{
+    using AddressMode =
+        atari::cpu6502::AddressMode;
+
+    switch (instruction.addressMode)
+    {
+    case AddressMode::ZeroPage:
+    case AddressMode::ZeroPageX:
+    case AddressMode::ZeroPageY:
+    case AddressMode::IndexedIndirect:
+    case AddressMode::IndirectIndexed:
+
+        return static_cast<atari::u16>(
+            instruction.bytes[1]);
+
+    case AddressMode::Absolute:
+    case AddressMode::AbsoluteX:
+    case AddressMode::AbsoluteY:
+    case AddressMode::Indirect:
+
+        return AbsoluteTarget(
+            instruction);
+
+    case AddressMode::Implied:
+    case AddressMode::Accumulator:
+    case AddressMode::Immediate:
+    case AddressMode::Relative:
+    default:
+
+        return std::nullopt;
+    }
+}
+
+std::string_view MakeAtariComment(
+    const atari::DisassembledInstruction& instruction)
+{
+    const auto address =
+        ReferencedAddress(instruction);
+
+    if (!address.has_value())
+    {
+        return {};
+    }
+
+    return atari::AtariSymbols::Find(
+        address.value());
 }
 
 void PrintInstruction(
     const atari::DisassembledInstruction& instruction,
     const std::map<atari::u16, std::string>& labels)
 {
+    //
+    // LABEL
+    //
+    const auto label =
+        labels.find(instruction.address);
+
+    if (label != labels.end())
+    {
+        std::cout
+            << std::left
+            << std::setw(12)
+            << std::setfill(' ')
+            << label->second;
+    }
+    else
+    {
+        std::cout
+            << std::left
+            << std::setw(12)
+            << std::setfill(' ')
+            << "";
+    }
+
+    //
+    // ADDRESS
+    //
     PrintAddress(
         instruction.address);
 
-    std::cout << ": ";
+    std::cout << "  ";
 
     //
-    // Machine-code bytes.
+    // MACHINE CODE
     //
     for (std::size_t i = 0;
          i < instruction.length;
@@ -293,6 +348,7 @@ void PrintInstruction(
         std::cout
             << std::uppercase
             << std::hex
+            << std::right
             << std::setw(2)
             << std::setfill('0')
             << static_cast<unsigned>(
@@ -300,9 +356,6 @@ void PrintInstruction(
             << ' ';
     }
 
-    //
-    // Align mnemonic column.
-    //
     for (std::size_t i = instruction.length;
          i < 3;
          ++i)
@@ -310,12 +363,36 @@ void PrintInstruction(
         std::cout << "   ";
     }
 
-    std::cout
-        << "  "
-        << FormatInstructionWithLabels(
+    //
+    // ASSEMBLY
+    //
+    const std::string instructionText =
+        FormatInstructionWithLabels(
             instruction,
-            labels)
-        << '\n';
+            labels);
+
+    std::cout
+        << " "
+        << std::left
+        << std::setw(24)
+        << std::setfill(' ')
+        << instructionText;
+
+    //
+    // Atari OS / hardware symbol comment.
+    //
+    const std::string_view comment =
+        MakeAtariComment(
+            instruction);
+
+    if (!comment.empty())
+    {
+        std::cout
+            << " ; "
+            << comment;
+    }
+
+    std::cout << '\n';
 }
 
 } // namespace
@@ -362,9 +439,6 @@ int main(
         return 1;
     }
 
-    //
-    // Entry points.
-    //
     std::vector<atari::u16> entryPoints;
 
     if (project.RunAddress() != 0)
@@ -381,9 +455,6 @@ int main(
             project.InitAddress());
     }
 
-    //
-    // Control-flow analysis.
-    //
     atari::ControlFlowAnalyzer analyzer;
 
     const auto analysis =
@@ -391,16 +462,10 @@ int main(
             project.GetMemory(),
             entryPoints);
 
-    //
-    // Mark code segments discovered by analysis.
-    //
     MarkReachedSegments(
         project,
         analysis);
 
-    //
-    // Build symbolic labels.
-    //
     const auto labels =
         BuildLabels(
             project,
@@ -409,9 +474,6 @@ int main(
     std::cout
         << "XEX loaded successfully.\n\n";
 
-    //
-    // Segment list.
-    //
     const auto& segments =
         project.Segments();
 
@@ -430,19 +492,16 @@ int main(
             << i
             << "] ";
 
-        PrintAddress(
-            segment.begin);
+        PrintAddress(segment.begin);
 
         std::cout << " - ";
 
-        PrintAddress(
-            segment.end);
+        PrintAddress(segment.end);
 
         std::cout
             << "  "
             << SegmentTypeToString(
                 segment.type)
-
             << "  "
             << std::dec
             << segment.Size()
@@ -464,9 +523,6 @@ int main(
         std::cout << '\n';
     }
 
-    //
-    // RUNAD.
-    //
     std::cout
         << "\nRUN address:  ";
 
@@ -477,13 +533,9 @@ int main(
     }
     else
     {
-        std::cout
-            << "not set";
+        std::cout << "not set";
     }
 
-    //
-    // INITAD.
-    //
     std::cout
         << "\nINIT address: ";
 
@@ -494,47 +546,34 @@ int main(
     }
     else
     {
-        std::cout
-            << "not set";
+        std::cout << "not set";
     }
 
-    //
-    // Project statistics.
-    //
     const auto statistics =
         atari::CalculateProjectStatistics(
             project);
 
     std::cout
         << "\n\nXEX Statistics:\n"
-
         << "  Segments:     "
         << statistics.segmentCount
         << '\n'
-
         << "  Code:         "
         << statistics.codeSegments
         << '\n'
-
         << "  System:       "
         << statistics.systemSegments
         << '\n'
-
         << "  Unknown:      "
         << statistics.unknownSegments
         << '\n'
-
         << "  Overlapping:  "
         << statistics.overlappingSegments
         << '\n'
-
         << "  Total bytes:  "
         << statistics.totalBytes
         << '\n';
 
-    //
-    // Control-flow information.
-    //
     std::cout
         << "\n=====================================\n"
         << " Control Flow Analysis\n"
@@ -569,32 +608,22 @@ int main(
         << "\nReachable instructions: "
         << std::dec
         << analysis.instructionAddresses.size()
-        << '\n';
-
-    std::cout
+        << '\n'
         << "Generated labels:       "
         << labels.size()
         << "\n\n";
 
-    //
-    // Reverse-engineering listing.
-    //
+    std::cout
+        << "LABEL       ADDRESS  BYTES       INSTRUCTION"
+        << "\n"
+        << "------------------------------------------------------------"
+        << "\n";
+
     atari::Disassembler disassembler;
 
     for (const auto address :
          analysis.instructionAddresses)
     {
-        const auto label =
-            labels.find(address);
-
-        if (label != labels.end())
-        {
-            std::cout
-                << '\n'
-                << label->second
-                << ":\n";
-        }
-
         const auto instruction =
             disassembler.Decode(
                 project.GetMemory(),
