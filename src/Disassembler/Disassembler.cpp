@@ -4,6 +4,7 @@
 #include <AtariStudio/Cpu6502/OpcodeTable.h>
 
 #include <cstdio>
+#include <string>
 
 namespace atari
 {
@@ -18,14 +19,19 @@ namespace atari
         {
             char buffer[64];
 
-            std::snprintf(buffer, sizeof(buffer), format, args...);
+            std::snprintf(
+                buffer,
+                sizeof(buffer),
+                format,
+                args...);
 
             return std::string(buffer);
         }
 
-    }
+    } // namespace
 
-    const char* Disassembler::InstructionToString(Instruction instruction)
+    const char* Disassembler::InstructionToString(
+        Instruction instruction)
     {
         switch (instruction)
         {
@@ -103,6 +109,7 @@ namespace atari
         case Instruction::TXS: return "TXS";
         case Instruction::TYA: return "TYA";
 
+        case Instruction::Illegal:
         default:
             return "???";
         }
@@ -115,7 +122,11 @@ namespace atari
     {
         const uint8_t lo = bytes[1];
         const uint8_t hi = bytes[2];
-        const uint16_t word = static_cast<uint16_t>(lo | (hi << 8));
+
+        const uint16_t word =
+            static_cast<uint16_t>(
+                static_cast<uint16_t>(lo) |
+                (static_cast<uint16_t>(hi) << 8));
 
         switch (mode)
         {
@@ -157,10 +168,12 @@ namespace atari
 
         case AddressMode::Relative:
         {
-            const int8_t offset = static_cast<int8_t>(lo);
+            const int8_t offset =
+                static_cast<int8_t>(lo);
 
             const uint16_t target =
-                static_cast<uint16_t>(address + 2 + offset);
+                static_cast<uint16_t>(
+                    address + 2 + offset);
 
             return StringFormat("$%04X", target);
         }
@@ -178,43 +191,66 @@ namespace atari
 
         result.address = address;
 
-        // Читаем опкод
-        result.opcode = memory.Read(address);
+        //
+        // Opcode
+        //
+        result.opcode = memory.Read8(address);
 
-        // Получаем информацию из таблицы опкодов
-        const auto& info = OpcodeTable::Get(result.opcode);
+        const auto& info =
+            OpcodeTable::Get(result.opcode);
 
         result.instruction = info.instruction;
         result.addressMode = info.addressMode;
         result.length = info.length;
 
-        // Считываем байты инструкции
+        //
+        // Bytes
+        //
         result.bytes[0] = result.opcode;
 
         if (info.length > 1)
-            result.bytes[1] = memory.Read(address + 1);
+        {
+            result.bytes[1] =
+                memory.Read8(
+                    static_cast<uint16_t>(address + 1));
+        }
 
         if (info.length > 2)
-            result.bytes[2] = memory.Read(address + 2);
+        {
+            result.bytes[2] =
+                memory.Read8(
+                    static_cast<uint16_t>(address + 2));
+        }
 
-        // Мнемоника
+        //
+        // Mnemonic
+        //
         if (info.instruction == Instruction::Illegal)
         {
-            result.mnemonic = StringFormat(".DB $%02X", result.opcode);
+            result.mnemonic =
+                StringFormat(
+                    ".DB $%02X",
+                    result.opcode);
         }
         else
         {
-            result.mnemonic = InstructionToString(info.instruction);
+            result.mnemonic =
+                InstructionToString(
+                    info.instruction);
         }
 
-        // Операнд
-        result.operand = FormatOperand(
-            info.addressMode,
-            address,
-            result.bytes.data());
+        //
+        // Operand
+        //
+        result.operand =
+            FormatOperand(
+                info.addressMode,
+                address,
+                result.bytes.data());
 
-        // Полная строка
-        // Полная строка
+        //
+        // Full instruction text
+        //
         if (info.instruction == Instruction::Illegal)
         {
             result.text = result.mnemonic;
@@ -225,6 +261,13 @@ namespace atari
         }
         else
         {
-            result.text = result.mnemonic + " " + result.operand;
+            result.text =
+                result.mnemonic +
+                " " +
+                result.operand;
         }
+
+        return result;
     }
+
+} // namespace atari

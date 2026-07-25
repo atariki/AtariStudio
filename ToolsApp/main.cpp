@@ -24,5 +24,10 @@ int main()
 
     std::cout << "\nInitialization completed successfully.\n";
 
+    std::cout << "\nInitialization completed successfully.\n";
+
+    std::cout << "\nPress Enter to exit...";
+    std::cin.get();
+
     return 0;
 }

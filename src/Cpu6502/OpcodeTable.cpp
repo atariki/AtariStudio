@@ -16,6 +16,11 @@ namespace atari::cpu6502
             false
         };
 
+#define OP(i,m,l,c,p) \
+    InstructionInfo{Instruction::i, AddressMode::m, l, c, p, true}
+
+#define ILL Illegal
+
     }
 
     const std::array<InstructionInfo, 256> OpcodeTable::m_table =
@@ -307,7 +312,6 @@ ILL,
 OP(SBC, AbsoluteX, 3, 4, true),
 OP(INC, AbsoluteX, 3, 7, false),
 ILL
-};
     };
 
     const InstructionInfo& OpcodeTable::Get(Opcode opcode)
@@ -316,23 +320,3 @@ ILL
     }
 
 } // namespace atari::cpu6502
-
-namespace
-{
-
-    constexpr InstructionInfo Illegal =
-    {
-        Instruction::Illegal,
-        AddressMode::Implied,
-        1,
-        2,
-        false,
-        false
-    };
-
-#define OP(i,m,l,c,p) \
-InstructionInfo{Instruction::i,AddressMode::m,l,c,p,true}
-
-#define ILL Illegal
-
-}

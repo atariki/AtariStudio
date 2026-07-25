@@ -1,18 +1,16 @@
 #pragma once
 
 #include <filesystem>
-
-#include <AtariStudio/Core/Result.h>
-#include <AtariStudio/Formats/XEX/XexFile.h>
+#include <string>
 
 namespace atari
 {
 
-    class BinaryReader;
+    class Project;
 
     ///
-    /// Загрузчик файлов Atari XEX.
-    /// Читает XEX-файл и заполняет объект XexFile.
+    /// Загрузчик Atari XEX-файлов.
+    /// Загружает сегменты непосредственно в Project/Memory.
     ///
     class XexLoader
     {
@@ -21,20 +19,18 @@ namespace atari
         XexLoader() = default;
 
         [[nodiscard]]
-        Result Load(const std::filesystem::path& filename,
-            XexFile& file);
+        bool Load(
+            const std::filesystem::path& filename,
+            Project& project);
+
+        [[nodiscard]]
+        const std::string& LastError() const noexcept;
 
     private:
 
-        [[nodiscard]]
-        Result ReadSegments(BinaryReader& reader,
-            XexFile& file);
+        void SetError(std::string message);
 
-        [[nodiscard]]
-        Result ReadSegment(BinaryReader& reader,
-            XexFile& file);
-
-        void DetectSpecialAddresses(XexFile& file);
+        std::string m_lastError;
     };
 
 } // namespace atari
