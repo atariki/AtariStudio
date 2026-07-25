@@ -36,7 +36,7 @@ public:
         std::array<bool, MemorySize> scheduled{};
         std::deque<u16> workList;
 
-        const auto enqueue =
+        auto enqueue =
             [&](u16 address)
             {
                 if (scheduled[address])
@@ -68,13 +68,10 @@ public:
             const u16 address = workList.front();
             workList.pop_front();
 
-            if (!memory.Cell(address).initialized)
-            {
-                continue;
-            }
-
             const auto instruction =
-                disassembler.Decode(memory, address);
+                disassembler.Decode(
+                    memory,
+                    address);
 
             if (instruction.length == 0 ||
                 instruction.length > 3)
@@ -82,13 +79,11 @@ public:
                 continue;
             }
 
-            //
-            // Проверяем, что все байты инструкции
-            // действительно загружены в память.
-            //
             bool completeInstruction = true;
 
-            for (u16 i = 0; i < instruction.length; ++i)
+            for (u16 i = 0;
+                 i < instruction.length;
+                 ++i)
             {
                 const std::uint32_t byteAddress =
                     static_cast<std::uint32_t>(address) + i;
@@ -112,10 +107,9 @@ public:
                 continue;
             }
 
-            //
-            // Помечаем байты инструкции как исполняемые.
-            //
-            for (u16 i = 0; i < instruction.length; ++i)
+            for (u16 i = 0;
+                 i < instruction.length;
+                 ++i)
             {
                 memory.Cell(
                     static_cast<u16>(address + i)).executable = true;
@@ -123,11 +117,11 @@ public:
 
             result.instructionAddresses.push_back(address);
 
-            const auto nextAddress =
+            const std::uint32_t nextAddress =
                 static_cast<std::uint32_t>(address) +
                 instruction.length;
 
-            const auto enqueueNext =
+            auto enqueueNext =
                 [&]()
                 {
                     if (nextAddress <= 0xFFFF)
@@ -137,16 +131,17 @@ public:
                     }
                 };
 
-            const auto absoluteTarget =
+            auto absoluteTarget =
                 [&]() -> u16
                 {
                     return static_cast<u16>(
-                        static_cast<u16>(instruction.bytes[1]) |
+                        static_cast<u16>(
+                            instruction.bytes[1]) |
                         (static_cast<u16>(
                             instruction.bytes[2]) << 8));
                 };
 
-            const auto relativeTarget =
+            auto relativeTarget =
                 [&]() -> u16
                 {
                     const auto offset =
@@ -163,9 +158,6 @@ public:
 
             switch (instruction.instruction)
             {
-            //
-            // Conditional branches.
-            //
             case cpu6502::Instruction::BCC:
             case cpu6502::Instruction::BCS:
             case cpu6502::Instruction::BEQ:
@@ -179,19 +171,12 @@ public:
                 enqueueNext();
                 break;
 
-            //
-            // Subroutine:
-            // analyze target and instruction after JSR.
-            //
             case cpu6502::Instruction::JSR:
 
                 enqueue(absoluteTarget());
                 enqueueNext();
                 break;
 
-            //
-            // Absolute JMP has no fall-through.
-            //
             case cpu6502::Instruction::JMP:
 
                 if (instruction.addressMode ==
@@ -200,21 +185,14 @@ public:
                     enqueue(absoluteTarget());
                 }
 
-                // JMP indirect пока не отслеживаем.
                 break;
 
-            //
-            // End of current execution path.
-            //
             case cpu6502::Instruction::RTS:
             case cpu6502::Instruction::RTI:
             case cpu6502::Instruction::BRK:
             case cpu6502::Instruction::Illegal:
                 break;
 
-            //
-            // Normal sequential instruction.
-            //
             default:
                 enqueueNext();
                 break;
@@ -223,6 +201,12 @@ public:
 
         std::sort(
             result.instructionAddresses.begin(),
+            result.instructionAddresses.end());
+
+        result.instructionAddresses.erase(
+            std::unique(
+                result.instructionAddresses.begin(),
+                result.instructionAddresses.end()),
             result.instructionAddresses.end());
 
         return result;

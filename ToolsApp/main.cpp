@@ -16,39 +16,22 @@ const char* SegmentTypeToString(atari::SegmentType type)
 {
     switch (type)
     {
-    case atari::SegmentType::Unknown:
-        return "Unknown";
-
-    case atari::SegmentType::Code:
-        return "Code";
-
-    case atari::SegmentType::Data:
-        return "Data";
-
-    case atari::SegmentType::Charset:
-        return "Charset";
-
-    case atari::SegmentType::Screen:
-        return "Screen";
-
-    case atari::SegmentType::DisplayList:
-        return "DisplayList";
-
-    case atari::SegmentType::Hardware:
-        return "Hardware";
-
-    case atari::SegmentType::ZeroPage:
-        return "ZeroPage";
-
-    case atari::SegmentType::System:
-        return "System";
+    case atari::SegmentType::Unknown:     return "Unknown";
+    case atari::SegmentType::Code:        return "Code";
+    case atari::SegmentType::Data:        return "Data";
+    case atari::SegmentType::Charset:     return "Charset";
+    case atari::SegmentType::Screen:      return "Screen";
+    case atari::SegmentType::DisplayList: return "DisplayList";
+    case atari::SegmentType::Hardware:    return "Hardware";
+    case atari::SegmentType::ZeroPage:    return "ZeroPage";
+    case atari::SegmentType::System:      return "System";
 
     default:
         return "Unknown";
     }
 }
 
-void PrintAddress(uint16_t address)
+void PrintAddress(atari::u16 address)
 {
     std::cout
         << '$'
@@ -57,6 +40,44 @@ void PrintAddress(uint16_t address)
         << std::setw(4)
         << std::setfill('0')
         << address;
+}
+
+void MarkReachedSegments(
+    atari::Project& project,
+    const atari::ControlFlowAnalysisResult& analysis)
+{
+    for (auto& segment : project.Segments())
+    {
+        if (segment.type == atari::SegmentType::System)
+        {
+            continue;
+        }
+
+        bool reached = false;
+
+        for (const auto address :
+             analysis.instructionAddresses)
+        {
+            if (address >= segment.begin &&
+                address <= segment.end)
+            {
+                reached = true;
+                break;
+            }
+        }
+
+        if (!reached)
+        {
+            continue;
+        }
+
+        segment.type = atari::SegmentType::Code;
+
+        if (segment.name.empty())
+        {
+            segment.name = "Reached code";
+        }
+    }
 }
 
 } // namespace
@@ -93,16 +114,46 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    std::vector<atari::u16> entryPoints;
+
+    if (project.RunAddress() != 0)
+    {
+        entryPoints.push_back(
+            project.RunAddress());
+    }
+
+    if (project.InitAddress() != 0 &&
+        project.InitAddress() != project.RunAddress())
+    {
+        entryPoints.push_back(
+            project.InitAddress());
+    }
+
+    atari::ControlFlowAnalyzer analyzer;
+
+    const auto analysis =
+        analyzer.Analyze(
+            project.GetMemory(),
+            entryPoints);
+
+    //
+    // Новый шаг Commit #0026:
+    // сегмент становится Code, если анализ потока
+    // реально обнаружил в нём инструкции.
+    //
+    MarkReachedSegments(
+        project,
+        analysis);
+
     std::cout << "XEX loaded successfully.\n\n";
 
     const auto& segments = project.Segments();
 
-    //
-    // Segments
-    //
     std::cout << "Segments:\n\n";
 
-    for (std::size_t i = 0; i < segments.size(); ++i)
+    for (std::size_t i = 0;
+         i < segments.size();
+         ++i)
     {
         const auto& segment = segments[i];
 
@@ -121,7 +172,6 @@ int main(int argc, char* argv[])
         std::cout
             << "  "
             << SegmentTypeToString(segment.type)
-
             << "  "
             << std::dec
             << segment.Size()
@@ -142,9 +192,6 @@ int main(int argc, char* argv[])
         std::cout << '\n';
     }
 
-    //
-    // RUNAD / INITAD
-    //
     std::cout << "\nRUN address:  ";
 
     if (project.RunAddress() != 0)
@@ -167,9 +214,6 @@ int main(int argc, char* argv[])
         std::cout << "not set";
     }
 
-    //
-    // Statistics
-    //
     const auto statistics =
         atari::CalculateProjectStatistics(project);
 
@@ -205,34 +249,6 @@ int main(int argc, char* argv[])
         << statistics.totalBytes
         << '\n';
 
-    //
-    // Entry points for control-flow analysis.
-    //
-    std::vector<atari::u16> entryPoints;
-
-    if (project.RunAddress() != 0)
-    {
-        entryPoints.push_back(
-            project.RunAddress());
-    }
-
-    if (project.InitAddress() != 0 &&
-        project.InitAddress() != project.RunAddress())
-    {
-        entryPoints.push_back(
-            project.InitAddress());
-    }
-
-    //
-    // Control-flow analysis
-    //
-    atari::ControlFlowAnalyzer analyzer;
-
-    auto analysis =
-        analyzer.Analyze(
-            project.GetMemory(),
-            entryPoints);
-
     std::cout << "\n=====================================\n";
     std::cout << " Control Flow Analysis\n";
     std::cout << "=====================================\n";
@@ -242,12 +258,11 @@ int main(int argc, char* argv[])
         << analysis.entryPoints.size()
         << '\n';
 
-    for (const auto address : analysis.entryPoints)
+    for (const auto address :
+         analysis.entryPoints)
     {
         std::cout << "  ";
-
         PrintAddress(address);
-
         std::cout << '\n';
     }
 
@@ -257,10 +272,6 @@ int main(int argc, char* argv[])
         << analysis.instructionAddresses.size()
         << "\n\n";
 
-    //
-    // Print only instructions actually reached
-    // by control-flow analysis.
-    //
     atari::Disassembler disassembler;
 
     for (const auto address :
@@ -289,9 +300,6 @@ int main(int argc, char* argv[])
                 << ' ';
         }
 
-        //
-        // Выравниваем колонку мнемоники.
-        //
         for (std::size_t i = instruction.length;
              i < 3;
              ++i)
