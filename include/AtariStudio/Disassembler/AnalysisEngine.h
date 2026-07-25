@@ -16,6 +16,7 @@
 #include <AtariStudio/Disassembler/DominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopNestingAnalyzer.h>
 #include <AtariStudio/Disassembler/NaturalLoopAnalyzer.h>
+#include <AtariStudio/Disassembler/PostDominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
 
 namespace atari
@@ -23,24 +24,59 @@ namespace atari
 
 struct AnalysisEngineResult
 {
+    //
+    // Control flow + relocation.
+    //
     ControlFlowAnalysisResult controlFlow;
 
+    //
+    // Symbols / XREF / relocation metadata.
+    //
     DisassemblyMetadata metadata;
 
+    //
+    // CODE / DATA regions.
+    //
     std::vector<CodeDataRegion> regions;
 
+    //
+    // Routines.
+    //
     RoutineAnalysisResult routines;
 
+    //
+    // Basic blocks.
+    //
     BasicBlockAnalysisResult basicBlocks;
 
+    //
+    // Per-routine CFG.
+    //
     ControlFlowGraphAnalysisResult graphs;
 
+    //
+    // Dominators + back edges.
+    //
     DominatorAnalysisResult dominators;
 
+    //
+    // Post-dominators.
+    //
+    PostDominatorAnalysisResult postDominators;
+
+    //
+    // Natural loops.
+    //
     NaturalLoopAnalysisResult loops;
 
+    //
+    // Loop nesting tree.
+    //
     LoopNestingAnalysisResult loopNesting;
 
+    //
+    // Final disassembly listing.
+    //
     DisassemblyListing listing;
 
     std::size_t cfgInstructionCount = 0;
@@ -110,6 +146,20 @@ struct AnalysisEngineResult
     {
         return
             dominators.BackEdgeCount();
+    }
+
+    [[nodiscard]]
+    std::size_t PostDominatorNodeCount() const noexcept
+    {
+        return
+            postDominators.NodeCount();
+    }
+
+    [[nodiscard]]
+    std::size_t PostDominatorTerminalCount() const noexcept
+    {
+        return
+            postDominators.TerminalCount();
     }
 
     [[nodiscard]]
@@ -185,8 +235,10 @@ public:
         }
 
         //
+        // =================================================
         // Phase 1:
         // Control flow + relocation.
+        // =================================================
         //
         ControlFlowAnalyzer
             controlFlowAnalyzer;
@@ -201,8 +253,10 @@ public:
                 instructionAddresses.size();
 
         //
+        // =================================================
         // Phase 2:
         // Disconnected code islands.
+        // =================================================
         //
         CodeIslandAnalyzer
             codeIslandAnalyzer;
@@ -217,16 +271,20 @@ public:
             result.cfgInstructionCount;
 
         //
+        // =================================================
         // Phase 3:
         // Symbols + XREF.
+        // =================================================
         //
         result.metadata.Build(
             project,
             result.controlFlow);
 
         //
+        // =================================================
         // Phase 4:
         // CODE / DATA.
+        // =================================================
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -236,8 +294,10 @@ public:
                 project);
 
         //
+        // =================================================
         // Phase 5:
         // Routines.
+        // =================================================
         //
         RoutineAnalyzer
             routineAnalyzer;
@@ -250,8 +310,10 @@ public:
                 result.regions);
 
         //
+        // =================================================
         // Phase 6:
         // Basic blocks.
+        // =================================================
         //
         BasicBlockAnalyzer
             basicBlockAnalyzer;
@@ -263,8 +325,10 @@ public:
                 result.routines);
 
         //
+        // =================================================
         // Phase 7:
         // CFG model.
+        // =================================================
         //
         ControlFlowGraphBuilder
             graphBuilder;
@@ -274,8 +338,10 @@ public:
                 result.basicBlocks);
 
         //
+        // =================================================
         // Phase 8:
         // Dominators + back edges.
+        // =================================================
         //
         DominatorAnalyzer
             dominatorAnalyzer;
@@ -285,8 +351,26 @@ public:
                 result.graphs);
 
         //
+        // =================================================
         // Phase 9:
+        // Post-dominators.
+        //
+        // This implementation has an iteration guard and
+        // cannot loop forever.
+        // =================================================
+        //
+        PostDominatorAnalyzer
+            postDominatorAnalyzer;
+
+        result.postDominators =
+            postDominatorAnalyzer.Analyze(
+                result.graphs);
+
+        //
+        // =================================================
+        // Phase 10:
         // Natural loops.
+        // =================================================
         //
         NaturalLoopAnalyzer
             naturalLoopAnalyzer;
@@ -297,8 +381,10 @@ public:
                 result.dominators);
 
         //
-        // Phase 10:
-        // Loop nesting tree.
+        // =================================================
+        // Phase 11:
+        // Loop nesting.
+        // =================================================
         //
         LoopNestingAnalyzer
             loopNestingAnalyzer;
@@ -308,8 +394,10 @@ public:
                 result.loops);
 
         //
-        // Phase 11:
+        // =================================================
+        // Phase 12:
         // Listing.
+        // =================================================
         //
         result.listing.Build(
             project,
