@@ -8,6 +8,7 @@
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
+#include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
 
 namespace atari
@@ -17,8 +18,7 @@ struct AnalysisEngineResult
 {
     //
     // Control-flow analysis, relocation,
-    // discovered instruction addresses
-    // and targets.
+    // instruction addresses and targets.
     //
     ControlFlowAnalysisResult controlFlow;
 
@@ -34,7 +34,12 @@ struct AnalysisEngineResult
     std::vector<CodeDataRegion> regions;
 
     //
-    // Statistics.
+    // GUI-independent listing model.
+    //
+    DisassemblyListing listing;
+
+    //
+    // Analysis statistics.
     //
     std::size_t cfgInstructionCount = 0;
 
@@ -61,6 +66,13 @@ struct AnalysisEngineResult
         return
             metadata.Symbols().Size();
     }
+
+    [[nodiscard]]
+    std::size_t ListingRowCount() const noexcept
+    {
+        return
+            listing.RowCount();
+    }
 };
 
 class AnalysisEngine
@@ -74,19 +86,14 @@ public:
         AnalysisEngineResult result;
 
         //
-        // Important:
-        //
-        // AnalysisEngine may be called more than once
-        // for the same project.
-        //
-        // Remove executable flags left by a previous
-        // analysis without destroying loaded memory.
+        // AnalysisEngine may safely run
+        // multiple times on the same project.
         //
         ResetAnalysisState(
             project);
 
         //
-        // Build initial entry points.
+        // Initial entry points.
         //
         std::vector<u16> entryPoints;
 
@@ -106,8 +113,7 @@ public:
 
         //
         // Phase 1:
-        //
-        // CFG + relocation analysis.
+        // CFG + relocation.
         //
         ControlFlowAnalyzer
             controlFlowAnalyzer;
@@ -123,8 +129,7 @@ public:
 
         //
         // Phase 2:
-        //
-        // Detect disconnected code islands.
+        // disconnected code islands.
         //
         CodeIslandAnalyzer
             codeIslandAnalyzer;
@@ -140,9 +145,8 @@ public:
 
         //
         // Phase 3:
-        //
-        // Build symbols, XREF, Atari comments
-        // and relocation metadata.
+        // symbols + XREF + Atari symbols +
+        // runtime / relocation metadata.
         //
         result.metadata.Build(
             project,
@@ -150,8 +154,7 @@ public:
 
         //
         // Phase 4:
-        //
-        // Build final CODE / DATA regions.
+        // CODE / DATA classification.
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -159,6 +162,16 @@ public:
         result.regions =
             codeDataAnalyzer.Analyze(
                 project);
+
+        //
+        // Phase 5:
+        // build final UI-independent listing.
+        //
+        result.listing.Build(
+            project,
+            result.controlFlow,
+            result.metadata,
+            result.regions);
 
         return result;
     }

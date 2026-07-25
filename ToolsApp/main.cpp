@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -10,7 +9,6 @@
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
 #include <AtariStudio/Disassembler/AnalysisEngine.h>
-#include <AtariStudio/Disassembler/Disassembler.h>
 #include <AtariStudio/Formats/XEX/XexLoader.h>
 
 namespace
@@ -82,48 +80,31 @@ std::string AddressToString(
     return stream.str();
 }
 
-void PrintInstruction(
-    const atari::DisassembledInstruction& instruction,
-    const atari::DisassemblyMetadata& metadata)
+void PrintCodeRow(
+    const atari::DisassemblyListingRow& row)
 {
     //
     // LABEL
     //
-    const std::string* label =
-        metadata.Symbols().Find(
-            instruction.address);
-
-    if (label != nullptr)
-    {
-        std::cout
-            << std::left
-            << std::setw(12)
-            << std::setfill(' ')
-            << *label;
-    }
-    else
-    {
-        std::cout
-            << std::left
-            << std::setw(12)
-            << std::setfill(' ')
-            << "";
-    }
+    std::cout
+        << std::left
+        << std::setw(12)
+        << std::setfill(' ')
+        << row.label;
 
     //
     // ADDRESS
     //
     PrintAddress(
-        instruction.address);
+        row.address);
 
     std::cout << "  ";
 
     //
     // MACHINE CODE
     //
-    for (std::size_t i = 0;
-         i < instruction.length;
-         ++i)
+    for (const atari::u8 value :
+         row.bytes)
     {
         std::cout
             << std::uppercase
@@ -132,12 +113,16 @@ void PrintInstruction(
             << std::setw(2)
             << std::setfill('0')
             << static_cast<unsigned>(
-                instruction.bytes[i])
+                value)
             << ' ';
     }
 
+    //
+    // 6502 instructions contain no more
+    // than three bytes.
+    //
     for (std::size_t i =
-             instruction.length;
+             row.bytes.size();
          i < 3;
          ++i)
     {
@@ -147,169 +132,124 @@ void PrintInstruction(
     //
     // ASSEMBLY
     //
-    const std::string instructionText =
-        metadata.FormatInstruction(
-            instruction);
-
     std::cout
         << " "
         << std::left
         << std::setw(24)
         << std::setfill(' ')
-        << instructionText;
+        << row.instruction;
 
     //
-    // COMMENTS / XREF / RUNTIME
+    // COMMENT
     //
-    const std::string comment =
-        metadata.BuildComment(
-            instruction);
-
-    if (!comment.empty())
+    if (!row.comment.empty())
     {
         std::cout
             << " ; "
-            << comment;
+            << row.comment;
     }
 
     std::cout << '\n';
 }
 
-void PrintDataRegion(
-    const atari::Memory& memory,
-    const atari::CodeDataRegion& region,
-    const atari::DisassemblyMetadata& metadata)
+void PrintDataRow(
+    const atari::DisassemblyListingRow& row)
 {
-    constexpr std::uint32_t
-        bytesPerLine = 8;
+    //
+    // LABEL
+    //
+    std::cout
+        << std::left
+        << std::setw(12)
+        << std::setfill(' ')
+        << row.label;
 
-    std::uint32_t address =
-        region.begin;
+    //
+    // ADDRESS
+    //
+    PrintAddress(
+        row.address);
 
-    const std::uint32_t end =
-        region.end;
+    std::cout << "  ";
 
-    while (address <= end)
+    //
+    // RAW DATA
+    //
+    for (const atari::u8 value :
+         row.bytes)
     {
-        const auto currentAddress =
-            static_cast<atari::u16>(
-                address);
+        std::cout
+            << std::uppercase
+            << std::hex
+            << std::right
+            << std::setw(2)
+            << std::setfill('0')
+            << static_cast<unsigned>(
+                value)
+            << ' ';
+    }
 
-        //
-        // LABEL
-        //
-        const std::string* label =
-            metadata.Symbols().Find(
-                currentAddress);
+    std::cout << '\n';
+}
 
-        if (label != nullptr)
+void PrintListing(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Code / Data Listing\n"
+        << "=====================================\n\n";
+
+    std::cout
+        << "LABEL       ADDRESS  BYTES       INSTRUCTION\n"
+        << "---------------------------------------------------------------------\n";
+
+    for (const auto& region :
+         analysis.listing.Regions())
+    {
+        std::cout << '\n';
+
+        if (region.IsCode())
         {
             std::cout
-                << std::left
-                << std::setw(12)
-                << std::setfill(' ')
-                << *label;
+                << "; CODE "
+                << AddressToString(
+                    region.begin)
+                << " - "
+                << AddressToString(
+                    region.end)
+                << '\n';
         }
         else
         {
             std::cout
-                << std::left
-                << std::setw(12)
-                << std::setfill(' ')
-                << "";
+                << "; DATA "
+                << AddressToString(
+                    region.begin)
+                << " - "
+                << AddressToString(
+                    region.end)
+                << " ("
+                << std::dec
+                << region.Size()
+                << " bytes)"
+                << '\n';
         }
 
-        //
-        // ADDRESS
-        //
-        PrintAddress(
-            currentAddress);
-
-        std::cout << "  ";
-
-        //
-        // DATA BYTES
-        //
-        for (std::uint32_t i = 0;
-             i < bytesPerLine;
-             ++i)
+        for (const auto& row :
+             region.rows)
         {
-            const std::uint32_t byteAddress =
-                address + i;
-
-            if (byteAddress > end ||
-                byteAddress > 0xFFFF)
+            if (row.IsCode())
             {
-                break;
+                PrintCodeRow(
+                    row);
             }
-
-            const auto value =
-                memory.Read8(
-                    static_cast<atari::u16>(
-                        byteAddress));
-
-            std::cout
-                << std::uppercase
-                << std::hex
-                << std::right
-                << std::setw(2)
-                << std::setfill('0')
-                << static_cast<unsigned>(
-                    value)
-                << ' ';
+            else
+            {
+                PrintDataRow(
+                    row);
+            }
         }
-
-        std::cout << '\n';
-
-        if (address + bytesPerLine >
-            0xFFFF)
-        {
-            break;
-        }
-
-        address +=
-            bytesPerLine;
-    }
-}
-
-void PrintCodeRegion(
-    const atari::Memory& memory,
-    const atari::CodeDataRegion& region,
-    const atari::AnalysisEngineResult& analysis)
-{
-    atari::Disassembler disassembler;
-
-    const auto& instructionAddresses =
-        analysis.controlFlow.
-            instructionAddresses;
-
-    const auto beginIterator =
-        std::lower_bound(
-            instructionAddresses.begin(),
-            instructionAddresses.end(),
-            region.begin);
-
-    for (auto iterator = beginIterator;
-         iterator !=
-             instructionAddresses.end();
-         ++iterator)
-    {
-        const atari::u16 address =
-            *iterator;
-
-        if (address > region.end)
-        {
-            break;
-        }
-
-        const auto instruction =
-            disassembler.Decode(
-                memory,
-                address);
-
-        PrintInstruction(
-            instruction,
-            analysis.metadata);
     }
 }
 
@@ -373,71 +313,6 @@ void PrintRelocationMap(
     }
 }
 
-void PrintMixedListing(
-    const atari::Project& project,
-    const atari::AnalysisEngineResult& analysis)
-{
-    const auto& memory =
-        project.GetMemory();
-
-    std::cout
-        << "\n=====================================\n"
-        << " Code / Data Listing\n"
-        << "=====================================\n\n";
-
-    std::cout
-        << "LABEL       ADDRESS  BYTES       INSTRUCTION\n"
-        << "---------------------------------------------------------------------\n";
-
-    //
-    // Regions are already calculated
-    // by AnalysisEngine.
-    //
-    for (const auto& region :
-         analysis.regions)
-    {
-        std::cout << '\n';
-
-        if (region.type ==
-            atari::CodeDataRegionType::Code)
-        {
-            std::cout
-                << "; CODE "
-                << AddressToString(
-                    region.begin)
-                << " - "
-                << AddressToString(
-                    region.end)
-                << '\n';
-
-            PrintCodeRegion(
-                memory,
-                region,
-                analysis);
-        }
-        else
-        {
-            std::cout
-                << "; DATA "
-                << AddressToString(
-                    region.begin)
-                << " - "
-                << AddressToString(
-                    region.end)
-                << " ("
-                << std::dec
-                << region.Size()
-                << " bytes)"
-                << '\n';
-
-            PrintDataRegion(
-                memory,
-                region,
-                analysis.metadata);
-        }
-    }
-}
-
 } // namespace
 
 int main(
@@ -462,7 +337,7 @@ int main(
         argv[1];
 
     //
-    // Load project.
+    // Load XEX.
     //
     atari::Project project;
 
@@ -489,7 +364,8 @@ int main(
     //
     // Complete AtariStudio analysis.
     //
-    atari::AnalysisEngine analysisEngine;
+    atari::AnalysisEngine
+        analysisEngine;
 
     const auto analysis =
         analysisEngine.Analyze(
@@ -499,7 +375,7 @@ int main(
         << "XEX loaded successfully.\n\n";
 
     //
-    // XEX segments.
+    // XEX SEGMENTS
     //
     const auto& segments =
         project.Segments();
@@ -554,7 +430,7 @@ int main(
     }
 
     //
-    // RUNAD / INITAD.
+    // RUNAD / INITAD
     //
     std::cout
         << "\nRUN address:  ";
@@ -566,7 +442,8 @@ int main(
     }
     else
     {
-        std::cout << "not set";
+        std::cout
+            << "not set";
     }
 
     std::cout
@@ -579,11 +456,12 @@ int main(
     }
     else
     {
-        std::cout << "not set";
+        std::cout
+            << "not set";
     }
 
     //
-    // XEX statistics.
+    // XEX STATISTICS
     //
     const auto statistics =
         atari::CalculateProjectStatistics(
@@ -611,7 +489,7 @@ int main(
         << '\n';
 
     //
-    // Analysis statistics.
+    // ANALYSIS STATISTICS
     //
     std::cout
         << "\nAnalysis:\n"
@@ -636,19 +514,21 @@ int main(
         << '\n'
         << "  Code/Data regions:        "
         << analysis.regions.size()
+        << '\n'
+        << "  Listing rows:             "
+        << analysis.ListingRowCount()
         << '\n';
 
     //
-    // Relocations.
+    // RELOCATION MAP
     //
     PrintRelocationMap(
         analysis);
 
     //
-    // Final listing.
+    // FINAL LISTING
     //
-    PrintMixedListing(
-        project,
+    PrintListing(
         analysis);
 
     std::cout
