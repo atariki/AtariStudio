@@ -9,6 +9,7 @@
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
+#include <AtariStudio/Disassembler/ControlFlowGraph.h>
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
@@ -19,13 +20,13 @@ namespace atari
 struct AnalysisEngineResult
 {
     //
-    // CFG + relocation.
+    // Control-flow analysis + relocation.
     //
     ControlFlowAnalysisResult controlFlow;
 
     //
     // Symbols, XREF, Atari symbols,
-    // runtime information.
+    // runtime / relocation comments.
     //
     DisassemblyMetadata metadata;
 
@@ -35,14 +36,19 @@ struct AnalysisEngineResult
     std::vector<CodeDataRegion> regions;
 
     //
-    // Routines / functions.
+    // Detected routines.
     //
     RoutineAnalysisResult routines;
 
     //
-    // Basic blocks for every detected routine.
+    // Basic blocks.
     //
     BasicBlockAnalysisResult basicBlocks;
+
+    //
+    // Final CFG model.
+    //
+    ControlFlowGraphAnalysisResult graphs;
 
     //
     // GUI-independent listing.
@@ -88,6 +94,20 @@ struct AnalysisEngineResult
     {
         return
             basicBlocks.BlockCount();
+    }
+
+    [[nodiscard]]
+    std::size_t GraphNodeCount() const noexcept
+    {
+        return
+            graphs.NodeCount();
+    }
+
+    [[nodiscard]]
+    std::size_t GraphEdgeCount() const noexcept
+    {
+        return
+            graphs.EdgeCount();
     }
 
     [[nodiscard]]
@@ -164,7 +184,7 @@ public:
 
         //
         // Phase 3:
-        // symbols + XREF + Atari metadata.
+        // symbols + XREF.
         //
         result.metadata.Build(
             project,
@@ -172,7 +192,7 @@ public:
 
         //
         // Phase 4:
-        // CODE / DATA classification.
+        // CODE / DATA.
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -183,7 +203,7 @@ public:
 
         //
         // Phase 5:
-        // routines / functions.
+        // routines.
         //
         RoutineAnalyzer
             routineAnalyzer;
@@ -210,7 +230,18 @@ public:
 
         //
         // Phase 7:
-        // final listing model.
+        // CFG graph model.
+        //
+        ControlFlowGraphBuilder
+            graphBuilder;
+
+        result.graphs =
+            graphBuilder.Build(
+                result.basicBlocks);
+
+        //
+        // Phase 8:
+        // listing.
         //
         result.listing.Build(
             project,
