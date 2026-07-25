@@ -16,6 +16,7 @@
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
+#include <AtariStudio/Disassembler/CrossReferenceAnalyzer.h>
 #include <AtariStudio/Disassembler/Disassembler.h>
 #include <AtariStudio/Formats/XEX/XexLoader.h>
 
@@ -102,6 +103,25 @@ std::string MakeAutomaticLabel(
         << address;
 
     return stream.str();
+}
+
+const char* CrossReferenceTypeToString(
+    atari::CrossReferenceType type)
+{
+    switch (type)
+    {
+    case atari::CrossReferenceType::Branch:
+        return "BR";
+
+    case atari::CrossReferenceType::Call:
+        return "JSR";
+
+    case atari::CrossReferenceType::Jump:
+        return "JMP";
+
+    default:
+        return "?";
+    }
 }
 
 std::map<atari::u16, std::string> BuildLabels(
@@ -293,18 +313,17 @@ std::string MakeRelocationTargetComment(
     const atari::ControlFlowAnalysisResult& analysis,
     const std::map<atari::u16, std::string>& labels)
 {
-    bool isControlFlowTarget = false;
+    bool isTarget = false;
 
     switch (instruction.instruction)
     {
     case atari::cpu6502::Instruction::JSR:
-
-        isControlFlowTarget = true;
+        isTarget = true;
         break;
 
     case atari::cpu6502::Instruction::JMP:
 
-        isControlFlowTarget =
+        isTarget =
             instruction.addressMode ==
             atari::cpu6502::AddressMode::Absolute;
 
@@ -314,7 +333,7 @@ std::string MakeRelocationTargetComment(
         break;
     }
 
-    if (!isControlFlowTarget)
+    if (!isTarget)
     {
         return {};
     }
@@ -341,8 +360,7 @@ std::string MakeRelocationTargetComment(
 
     if (label != labels.end())
     {
-        result +=
-            label->second;
+        result += label->second;
     }
     else
     {
@@ -359,11 +377,6 @@ std::string MakeRuntimeAddressComment(
     const atari::ControlFlowAnalysisResult& analysis,
     const std::map<atari::u16, std::string>& labels)
 {
-    //
-    // Чтобы не засорять каждую строку,
-    // runtime-адрес показываем только
-    // у помеченных точек входа/перехода.
-    //
     if (labels.find(
             instruction.address) ==
         labels.end())
@@ -386,6 +399,49 @@ std::string MakeRuntimeAddressComment(
             runtimeAddress.value());
 }
 
+std::string MakeCrossReferenceComment(
+    atari::u16 targetAddress,
+    const atari::CrossReferenceAnalysisResult& xrefs)
+{
+    std::ostringstream stream;
+
+    bool found = false;
+
+    for (const auto& reference :
+         xrefs.references)
+    {
+        if (reference.targetAddress !=
+            targetAddress)
+        {
+            continue;
+        }
+
+        if (!found)
+        {
+            stream << "XREF: ";
+            found = true;
+        }
+        else
+        {
+            stream << ", ";
+        }
+
+        stream
+            << CrossReferenceTypeToString(
+                reference.type)
+            << ' '
+            << AddressToString(
+                reference.sourceAddress);
+    }
+
+    if (!found)
+    {
+        return {};
+    }
+
+    return stream.str();
+}
+
 void AppendComment(
     std::vector<std::string>& comments,
     std::string comment)
@@ -400,6 +456,7 @@ void AppendComment(
 void PrintInstruction(
     const atari::DisassembledInstruction& instruction,
     const atari::ControlFlowAnalysisResult& analysis,
+    const atari::CrossReferenceAnalysisResult& xrefs,
     const std::map<atari::u16, std::string>& labels)
 {
     //
@@ -476,7 +533,7 @@ void PrintInstruction(
         << instructionText;
 
     //
-    // COMMENTS / SYMBOLIC INFORMATION
+    // COMMENTS
     //
     std::vector<std::string> comments;
 
@@ -503,6 +560,12 @@ void PrintInstruction(
             instruction,
             analysis,
             labels));
+
+    AppendComment(
+        comments,
+        MakeCrossReferenceComment(
+            instruction.address,
+            xrefs));
 
     if (!comments.empty())
     {
@@ -607,8 +670,7 @@ void PrintDataRegion(
             break;
         }
 
-        address +=
-            bytesPerLine;
+        address += bytesPerLine;
     }
 }
 
@@ -616,6 +678,7 @@ void PrintCodeRegion(
     const atari::Memory& memory,
     const atari::CodeDataRegion& region,
     const atari::ControlFlowAnalysisResult& analysis,
+    const atari::CrossReferenceAnalysisResult& xrefs,
     const std::map<atari::u16, std::string>& labels)
 {
     atari::Disassembler disassembler;
@@ -649,6 +712,7 @@ void PrintCodeRegion(
         PrintInstruction(
             instruction,
             analysis,
+            xrefs,
             labels);
     }
 }
@@ -713,6 +777,7 @@ void PrintRelocationMap(
 void PrintMixedListing(
     const atari::Project& project,
     const atari::ControlFlowAnalysisResult& analysis,
+    const atari::CrossReferenceAnalysisResult& xrefs,
     const std::map<atari::u16, std::string>& labels)
 {
     atari::CodeDataAnalyzer analyzer;
@@ -754,6 +819,7 @@ void PrintMixedListing(
                 memory,
                 region,
                 analysis,
+                xrefs,
                 labels);
         }
         else
@@ -840,8 +906,7 @@ int main(
     }
 
     //
-    // Phase 1:
-    // normal CFG + relocation.
+    // Phase 1: CFG + relocation.
     //
     atari::ControlFlowAnalyzer
         controlFlowAnalyzer;
@@ -855,8 +920,7 @@ int main(
         analysis.instructionAddresses.size();
 
     //
-    // Phase 2:
-    // disconnected code islands.
+    // Phase 2: code islands.
     //
     atari::CodeIslandAnalyzer
         codeIslandAnalyzer;
@@ -870,7 +934,18 @@ int main(
         normalInstructions;
 
     //
-    // Labels after all analysis phases.
+    // Phase 3: cross references.
+    //
+    atari::CrossReferenceAnalyzer
+        crossReferenceAnalyzer;
+
+    const auto xrefs =
+        crossReferenceAnalyzer.Analyze(
+            project.GetMemory(),
+            analysis);
+
+    //
+    // Labels.
     //
     const auto labels =
         BuildLabels(
@@ -883,8 +958,7 @@ int main(
     const auto& segments =
         project.Segments();
 
-    std::cout
-        << "Segments:\n\n";
+    std::cout << "Segments:\n\n";
 
     for (std::size_t i = 0;
          i < segments.size();
@@ -997,6 +1071,9 @@ int main(
         << "  Total instructions:       "
         << analysis.instructionAddresses.size()
         << '\n'
+        << "  Cross references:         "
+        << xrefs.references.size()
+        << '\n'
         << "  Generated labels:         "
         << labels.size()
         << '\n';
@@ -1007,6 +1084,7 @@ int main(
     PrintMixedListing(
         project,
         analysis,
+        xrefs,
         labels);
 
     std::cout
