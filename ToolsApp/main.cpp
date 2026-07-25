@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
@@ -48,6 +49,25 @@ const char* SegmentTypeToString(
 
     default:
         return "Unknown";
+    }
+}
+
+const char* BasicBlockEdgeTypeToString(
+    atari::BasicBlockEdgeType type)
+{
+    switch (type)
+    {
+    case atari::BasicBlockEdgeType::FallThrough:
+        return "fall";
+
+    case atari::BasicBlockEdgeType::BranchTaken:
+        return "branch";
+
+    case atari::BasicBlockEdgeType::Jump:
+        return "jump";
+
+    default:
+        return "?";
     }
 }
 
@@ -136,8 +156,8 @@ void PrintRoutines(
             routine.endAddress);
 
         std::cout
-            << "  "
             << std::dec
+            << "  "
             << routine.InstructionCount()
             << " instructions";
 
@@ -207,6 +227,92 @@ void PrintRoutines(
         }
 
         std::cout << '\n';
+    }
+}
+
+void PrintBasicBlocks(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Basic Blocks\n"
+        << "=====================================\n";
+
+    for (const auto& routine :
+         analysis.basicBlocks.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.routineName
+            << "  ";
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  ("
+            << routine.blocks.size()
+            << " blocks)\n";
+
+        for (const auto& block :
+             routine.blocks)
+        {
+            std::cout
+                << "  ";
+
+            PrintAddress(
+                block.beginAddress);
+
+            std::cout << " - ";
+
+            PrintAddress(
+                block.endAddress);
+
+            std::cout
+                << std::dec
+                << "  "
+                << block.InstructionCount()
+                << " instructions";
+
+            if (block.terminal)
+            {
+                std::cout << "  [terminal]";
+            }
+
+            std::cout
+                << "\n    -> ";
+
+            if (block.successors.empty())
+            {
+                std::cout << "none";
+            }
+            else
+            {
+                for (std::size_t i = 0;
+                     i < block.successors.size();
+                     ++i)
+                {
+                    if (i != 0)
+                    {
+                        std::cout << ", ";
+                    }
+
+                    const auto& edge =
+                        block.successors[i];
+
+                    std::cout
+                        << BasicBlockEdgeTypeToString(
+                            edge.type)
+                        << ' ';
+
+                    PrintAddress(
+                        edge.targetAddress);
+                }
+            }
+
+            std::cout << '\n';
+        }
     }
 }
 
@@ -408,8 +514,8 @@ void PrintRelocationMap(
                 destinationEnd));
 
         std::cout
-            << "  ("
             << std::dec
+            << "  ("
             << range.size
             << " bytes)\n";
     }
@@ -531,7 +637,8 @@ int main(
     }
     else
     {
-        std::cout << "not set";
+        std::cout
+            << "not set";
     }
 
     std::cout
@@ -544,12 +651,20 @@ int main(
     }
     else
     {
-        std::cout << "not set";
+        std::cout
+            << "not set";
     }
 
     const auto statistics =
         atari::CalculateProjectStatistics(
             project);
+
+    //
+    // Important:
+    // PrintAddress() switches std::cout to HEX.
+    // Restore decimal mode before counters.
+    //
+    std::cout << std::dec;
 
     std::cout
         << "\n\nXEX Statistics:\n"
@@ -571,6 +686,8 @@ int main(
         << "  Total bytes:  "
         << statistics.totalBytes
         << '\n';
+
+    std::cout << std::dec;
 
     std::cout
         << "\nAnalysis:\n"
@@ -599,6 +716,9 @@ int main(
         << "  Routines:                 "
         << analysis.RoutineCount()
         << '\n'
+        << "  Basic blocks:             "
+        << analysis.BasicBlockCount()
+        << '\n'
         << "  Listing rows:             "
         << analysis.ListingRowCount()
         << '\n';
@@ -609,13 +729,17 @@ int main(
     PrintRoutines(
         analysis);
 
+    PrintBasicBlocks(
+        analysis);
+
     PrintListing(
         analysis);
 
-    std::cout
-        << "\nPress Enter to exit...";
-
-    std::cin.get();
-
+    //
+    // No std::cin.get().
+    //
+    // TestApp must terminate immediately so that the
+    // linker can replace TestApp.exe on the next F5.
+    //
     return 0;
 }

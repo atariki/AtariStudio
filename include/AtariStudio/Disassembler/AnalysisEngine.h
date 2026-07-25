@@ -5,6 +5,7 @@
 
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/Types.h>
+#include <AtariStudio/Disassembler/BasicBlockAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
@@ -34,12 +35,17 @@ struct AnalysisEngineResult
     std::vector<CodeDataRegion> regions;
 
     //
-    // Detected routines / functions.
+    // Routines / functions.
     //
     RoutineAnalysisResult routines;
 
     //
-    // Final GUI-independent listing.
+    // Basic blocks for every detected routine.
+    //
+    BasicBlockAnalysisResult basicBlocks;
+
+    //
+    // GUI-independent listing.
     //
     DisassemblyListing listing;
 
@@ -75,6 +81,13 @@ struct AnalysisEngineResult
     {
         return
             routines.routines.size();
+    }
+
+    [[nodiscard]]
+    std::size_t BasicBlockCount() const noexcept
+    {
+        return
+            basicBlocks.BlockCount();
     }
 
     [[nodiscard]]
@@ -151,8 +164,7 @@ public:
 
         //
         // Phase 3:
-        // symbols + XREF + Atari symbols +
-        // relocation metadata.
+        // symbols + XREF + Atari metadata.
         //
         result.metadata.Build(
             project,
@@ -160,7 +172,7 @@ public:
 
         //
         // Phase 4:
-        // CODE / DATA.
+        // CODE / DATA classification.
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -185,6 +197,19 @@ public:
 
         //
         // Phase 6:
+        // basic blocks.
+        //
+        BasicBlockAnalyzer
+            basicBlockAnalyzer;
+
+        result.basicBlocks =
+            basicBlockAnalyzer.Analyze(
+                project,
+                result.controlFlow,
+                result.routines);
+
+        //
+        // Phase 7:
         // final listing model.
         //
         result.listing.Build(
