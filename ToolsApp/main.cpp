@@ -114,7 +114,8 @@ std::map<atari::u16, std::string> BuildLabels(
          analysis.targetAddresses)
     {
         labels[address] =
-            MakeAutomaticLabel(address);
+            MakeAutomaticLabel(
+                address);
     }
 
     if (project.RunAddress() != 0)
@@ -182,7 +183,8 @@ std::string FormatInstructionWithLabels(
     case atari::cpu6502::Instruction::BVS:
 
         target =
-            RelativeTarget(instruction);
+            RelativeTarget(
+                instruction);
 
         hasTarget = true;
         break;
@@ -190,7 +192,8 @@ std::string FormatInstructionWithLabels(
     case atari::cpu6502::Instruction::JSR:
 
         target =
-            AbsoluteTarget(instruction);
+            AbsoluteTarget(
+                instruction);
 
         hasTarget = true;
         break;
@@ -201,7 +204,8 @@ std::string FormatInstructionWithLabels(
             atari::cpu6502::AddressMode::Absolute)
         {
             target =
-                AbsoluteTarget(instruction);
+                AbsoluteTarget(
+                    instruction);
 
             hasTarget = true;
         }
@@ -218,9 +222,11 @@ std::string FormatInstructionWithLabels(
     }
 
     const auto iterator =
-        labels.find(target);
+        labels.find(
+            target);
 
-    if (iterator == labels.end())
+    if (iterator ==
+        labels.end())
     {
         return instruction.text;
     }
@@ -270,7 +276,8 @@ std::string_view MakeAtariComment(
     const atari::DisassembledInstruction& instruction)
 {
     const auto address =
-        ReferencedAddress(instruction);
+        ReferencedAddress(
+            instruction);
 
     if (!address.has_value())
     {
@@ -281,10 +288,123 @@ std::string_view MakeAtariComment(
         address.value());
 }
 
-void PrintInstruction(
+std::string MakeRelocationTargetComment(
     const atari::DisassembledInstruction& instruction,
+    const atari::ControlFlowAnalysisResult& analysis,
     const std::map<atari::u16, std::string>& labels)
 {
+    bool isControlFlowTarget = false;
+
+    switch (instruction.instruction)
+    {
+    case atari::cpu6502::Instruction::JSR:
+
+        isControlFlowTarget = true;
+        break;
+
+    case atari::cpu6502::Instruction::JMP:
+
+        isControlFlowTarget =
+            instruction.addressMode ==
+            atari::cpu6502::AddressMode::Absolute;
+
+        break;
+
+    default:
+        break;
+    }
+
+    if (!isControlFlowTarget)
+    {
+        return {};
+    }
+
+    const atari::u16 runtimeTarget =
+        AbsoluteTarget(
+            instruction);
+
+    const auto source =
+        analysis.relocation.ResolveDestination(
+            runtimeTarget);
+
+    if (!source.has_value())
+    {
+        return {};
+    }
+
+    std::string result =
+        "-> ";
+
+    const auto label =
+        labels.find(
+            source.value());
+
+    if (label != labels.end())
+    {
+        result +=
+            label->second;
+    }
+    else
+    {
+        result +=
+            AddressToString(
+                source.value());
+    }
+
+    return result;
+}
+
+std::string MakeRuntimeAddressComment(
+    const atari::DisassembledInstruction& instruction,
+    const atari::ControlFlowAnalysisResult& analysis,
+    const std::map<atari::u16, std::string>& labels)
+{
+    //
+    // Чтобы не засорять каждую строку,
+    // runtime-адрес показываем только
+    // у помеченных точек входа/перехода.
+    //
+    if (labels.find(
+            instruction.address) ==
+        labels.end())
+    {
+        return {};
+    }
+
+    const auto runtimeAddress =
+        analysis.relocation.ResolveSource(
+            instruction.address);
+
+    if (!runtimeAddress.has_value())
+    {
+        return {};
+    }
+
+    return
+        "runtime " +
+        AddressToString(
+            runtimeAddress.value());
+}
+
+void AppendComment(
+    std::vector<std::string>& comments,
+    std::string comment)
+{
+    if (!comment.empty())
+    {
+        comments.push_back(
+            std::move(comment));
+    }
+}
+
+void PrintInstruction(
+    const atari::DisassembledInstruction& instruction,
+    const atari::ControlFlowAnalysisResult& analysis,
+    const std::map<atari::u16, std::string>& labels)
+{
+    //
+    // LABEL
+    //
     const auto label =
         labels.find(
             instruction.address);
@@ -306,11 +426,17 @@ void PrintInstruction(
             << "";
     }
 
+    //
+    // ADDRESS
+    //
     PrintAddress(
         instruction.address);
 
     std::cout << "  ";
 
+    //
+    // MACHINE CODE
+    //
     for (std::size_t i = 0;
          i < instruction.length;
          ++i)
@@ -326,13 +452,17 @@ void PrintInstruction(
             << ' ';
     }
 
-    for (std::size_t i = instruction.length;
+    for (std::size_t i =
+             instruction.length;
          i < 3;
          ++i)
     {
         std::cout << "   ";
     }
 
+    //
+    // ASSEMBLY
+    //
     const std::string instructionText =
         FormatInstructionWithLabels(
             instruction,
@@ -345,15 +475,51 @@ void PrintInstruction(
         << std::setfill(' ')
         << instructionText;
 
-    const std::string_view comment =
+    //
+    // COMMENTS / SYMBOLIC INFORMATION
+    //
+    std::vector<std::string> comments;
+
+    const std::string_view atariComment =
         MakeAtariComment(
             instruction);
 
-    if (!comment.empty())
+    if (!atariComment.empty())
     {
-        std::cout
-            << " ; "
-            << comment;
+        comments.emplace_back(
+            atariComment);
+    }
+
+    AppendComment(
+        comments,
+        MakeRelocationTargetComment(
+            instruction,
+            analysis,
+            labels));
+
+    AppendComment(
+        comments,
+        MakeRuntimeAddressComment(
+            instruction,
+            analysis,
+            labels));
+
+    if (!comments.empty())
+    {
+        std::cout << " ; ";
+
+        for (std::size_t i = 0;
+             i < comments.size();
+             ++i)
+        {
+            if (i != 0)
+            {
+                std::cout << " | ";
+            }
+
+            std::cout
+                << comments[i];
+        }
     }
 
     std::cout << '\n';
@@ -441,7 +607,8 @@ void PrintDataRegion(
             break;
         }
 
-        address += bytesPerLine;
+        address +=
+            bytesPerLine;
     }
 }
 
@@ -459,7 +626,8 @@ void PrintCodeRegion(
             analysis.instructionAddresses.end(),
             region.begin);
 
-    for (auto iterator = beginIterator;
+    for (auto iterator =
+             beginIterator;
          iterator !=
              analysis.instructionAddresses.end();
          ++iterator)
@@ -467,7 +635,8 @@ void PrintCodeRegion(
         const atari::u16 address =
             *iterator;
 
-        if (address > region.end)
+        if (address >
+            region.end)
         {
             break;
         }
@@ -479,7 +648,65 @@ void PrintCodeRegion(
 
         PrintInstruction(
             instruction,
+            analysis,
             labels);
+    }
+}
+
+void PrintRelocationMap(
+    const atari::ControlFlowAnalysisResult& analysis)
+{
+    std::cout
+        << "\nRelocation map:\n";
+
+    if (analysis.relocation.ranges.empty())
+    {
+        std::cout
+            << "  none\n";
+
+        return;
+    }
+
+    for (const auto& range :
+         analysis.relocation.ranges)
+    {
+        const std::uint32_t sourceEnd =
+            static_cast<std::uint32_t>(
+                range.sourceBegin) +
+            range.size - 1;
+
+        const std::uint32_t destinationEnd =
+            static_cast<std::uint32_t>(
+                range.destinationBegin) +
+            range.size - 1;
+
+        std::cout << "  ";
+
+        PrintAddress(
+            range.sourceBegin);
+
+        std::cout << " - ";
+
+        PrintAddress(
+            static_cast<atari::u16>(
+                sourceEnd));
+
+        std::cout << "  ->  ";
+
+        PrintAddress(
+            range.destinationBegin);
+
+        std::cout << " - ";
+
+        PrintAddress(
+            static_cast<atari::u16>(
+                destinationEnd));
+
+        std::cout
+            << "  ("
+            << std::dec
+            << range.size
+            << " bytes)\n";
     }
 }
 
@@ -614,9 +841,10 @@ int main(
 
     //
     // Phase 1:
-    // normal CFG + relocation analysis.
+    // normal CFG + relocation.
     //
-    atari::ControlFlowAnalyzer controlFlowAnalyzer;
+    atari::ControlFlowAnalyzer
+        controlFlowAnalyzer;
 
     auto analysis =
         controlFlowAnalyzer.Analyze(
@@ -628,9 +856,10 @@ int main(
 
     //
     // Phase 2:
-    // detect disconnected code islands.
+    // disconnected code islands.
     //
-    atari::CodeIslandAnalyzer codeIslandAnalyzer;
+    atari::CodeIslandAnalyzer
+        codeIslandAnalyzer;
 
     codeIslandAnalyzer.Analyze(
         project,
@@ -641,8 +870,7 @@ int main(
         normalInstructions;
 
     //
-    // Labels are built only after all analysis
-    // phases have finished.
+    // Labels after all analysis phases.
     //
     const auto labels =
         BuildLabels(
@@ -655,7 +883,8 @@ int main(
     const auto& segments =
         project.Segments();
 
-    std::cout << "Segments:\n\n";
+    std::cout
+        << "Segments:\n\n";
 
     for (std::size_t i = 0;
          i < segments.size();
@@ -756,21 +985,24 @@ int main(
 
     std::cout
         << "\nAnalysis:\n"
-        << "  Entry points:           "
+        << "  Entry points:             "
         << analysis.entryPoints.size()
         << '\n'
-        << "  CFG instructions:       "
+        << "  CFG instructions:         "
         << normalInstructions
         << '\n'
         << "  Code-island instructions: "
         << islandInstructions
         << '\n'
-        << "  Total instructions:     "
+        << "  Total instructions:       "
         << analysis.instructionAddresses.size()
         << '\n'
-        << "  Generated labels:       "
+        << "  Generated labels:         "
         << labels.size()
         << '\n';
+
+    PrintRelocationMap(
+        analysis);
 
     PrintMixedListing(
         project,

@@ -23,10 +23,11 @@ struct RelocationRange
         u16 address) const noexcept
     {
         const std::uint32_t value =
-            address;
+            static_cast<std::uint32_t>(address);
 
         const std::uint32_t begin =
-            destinationBegin;
+            static_cast<std::uint32_t>(
+                destinationBegin);
 
         const std::uint32_t end =
             begin + size;
@@ -36,6 +37,28 @@ struct RelocationRange
             value < end;
     }
 
+    [[nodiscard]]
+    bool ContainsSource(
+        u16 address) const noexcept
+    {
+        const std::uint32_t value =
+            static_cast<std::uint32_t>(address);
+
+        const std::uint32_t begin =
+            static_cast<std::uint32_t>(
+                sourceBegin);
+
+        const std::uint32_t end =
+            begin + size;
+
+        return
+            value >= begin &&
+            value < end;
+    }
+
+    //
+    // Runtime address -> source address in XEX.
+    //
     [[nodiscard]]
     std::optional<u16> DestinationToSource(
         u16 address) const noexcept
@@ -63,12 +86,46 @@ struct RelocationRange
         return static_cast<u16>(
             source);
     }
+
+    //
+    // Source address in XEX -> runtime address.
+    //
+    [[nodiscard]]
+    std::optional<u16> SourceToDestination(
+        u16 address) const noexcept
+    {
+        if (!ContainsSource(address))
+        {
+            return std::nullopt;
+        }
+
+        const std::uint32_t offset =
+            static_cast<std::uint32_t>(address) -
+            static_cast<std::uint32_t>(
+                sourceBegin);
+
+        const std::uint32_t destination =
+            static_cast<std::uint32_t>(
+                destinationBegin) +
+            offset;
+
+        if (destination > 0xFFFF)
+        {
+            return std::nullopt;
+        }
+
+        return static_cast<u16>(
+            destination);
+    }
 };
 
 struct RelocationAnalysisResult
 {
     std::vector<RelocationRange> ranges;
 
+    //
+    // Runtime address -> XEX source.
+    //
     [[nodiscard]]
     std::optional<u16> ResolveDestination(
         u16 address) const noexcept
@@ -89,6 +146,30 @@ struct RelocationAnalysisResult
 
         return std::nullopt;
     }
+
+    //
+    // XEX source -> runtime address.
+    //
+    [[nodiscard]]
+    std::optional<u16> ResolveSource(
+        u16 address) const noexcept
+    {
+        for (auto iterator = ranges.rbegin();
+             iterator != ranges.rend();
+             ++iterator)
+        {
+            const auto destination =
+                iterator->SourceToDestination(
+                    address);
+
+            if (destination.has_value())
+            {
+                return destination;
+            }
+        }
+
+        return std::nullopt;
+    }
 };
 
 class RelocationAnalyzer
@@ -102,12 +183,11 @@ public:
         RelocationAnalysisResult result;
 
         //
-        // Ищем типичный 6502 copy loop:
+        // Ищем типичный copy-loop:
         //
         // LDX #$00
         //
         // loop:
-        //     ...
         //     LDA source,X
         //     STA destination,X
         //     ...
@@ -115,15 +195,15 @@ public:
         //     BNE loop
         //
         // После переполнения X копируется
-        // ровно 256 байт.
+        // 256 байт.
         //
-
         for (std::uint32_t address = 2;
              address <= 0xFFFC;
              ++address)
         {
             const auto incrementAddress =
-                static_cast<u16>(address);
+                static_cast<u16>(
+                    address);
 
             if (!memory.Cell(
                     incrementAddress).initialized)
@@ -154,7 +234,7 @@ public:
             }
 
             //
-            // BNE relative
+            // BNE
             //
             if (memory.Read8(
                     branchAddress) != 0xD0)
@@ -187,8 +267,8 @@ public:
                     branchTargetValue);
 
             //
-            // Не рассматриваем слишком большие
-            // циклы как простой copy loop.
+            // Copy-loop должен быть достаточно
+            // компактным.
             //
             if (address -
                     static_cast<std::uint32_t>(
@@ -199,9 +279,7 @@ public:
             }
 
             //
-            // Проверяем наличие LDX #$00
-            // непосредственно перед циклом
-            // или внутри его начала.
+            // Ищем LDX #$00.
             //
             bool initializesX = false;
 
@@ -238,9 +316,6 @@ public:
                     continue;
                 }
 
-                //
-                // LDX #$00
-                //
                 if (memory.Read8(
                         candidateAddress) ==
                         0xA2 &&
@@ -259,7 +334,7 @@ public:
             }
 
             //
-            // Теперь внутри цикла ищем:
+            // Ищем пары:
             //
             // BD xx xx   LDA absolute,X
             // 9D xx xx   STA absolute,X
@@ -269,10 +344,6 @@ public:
                  candidate + 5 <= address;
                  ++candidate)
             {
-                const auto candidateAddress =
-                    static_cast<u16>(
-                        candidate);
-
                 bool complete = true;
 
                 for (std::uint32_t i = 0;
@@ -300,8 +371,8 @@ public:
                 // LDA absolute,X
                 //
                 if (memory.Read8(
-                        candidateAddress) !=
-                    0xBD)
+                        static_cast<u16>(
+                            candidate)) != 0xBD)
                 {
                     continue;
                 }
@@ -311,8 +382,7 @@ public:
                 //
                 if (memory.Read8(
                         static_cast<u16>(
-                            candidate + 3)) !=
-                    0x9D)
+                            candidate + 3)) != 0x9D)
                 {
                     continue;
                 }
@@ -349,8 +419,7 @@ public:
                 range.destinationBegin =
                     destination;
 
-                range.size =
-                    256;
+                range.size = 256;
 
                 const auto duplicate =
                     std::find_if(
@@ -375,10 +444,6 @@ public:
                         range);
                 }
 
-                //
-                // Пропускаем найденную пару
-                // LDA/STA.
-                //
                 candidate += 5;
             }
         }
