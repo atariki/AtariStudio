@@ -10,6 +10,7 @@
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
+#include <AtariStudio/Disassembler/RoutineAnalyzer.h>
 
 namespace atari
 {
@@ -17,30 +18,31 @@ namespace atari
 struct AnalysisEngineResult
 {
     //
-    // Control-flow analysis, relocation,
-    // instruction addresses and targets.
+    // CFG + relocation.
     //
     ControlFlowAnalysisResult controlFlow;
 
     //
-    // Symbols, XREF, Atari comments
-    // and relocation metadata.
+    // Symbols, XREF, Atari symbols,
+    // runtime information.
     //
     DisassemblyMetadata metadata;
 
     //
-    // Final CODE / DATA regions.
+    // CODE / DATA regions.
     //
     std::vector<CodeDataRegion> regions;
 
     //
-    // GUI-independent listing model.
+    // Detected routines / functions.
+    //
+    RoutineAnalysisResult routines;
+
+    //
+    // Final GUI-independent listing.
     //
     DisassemblyListing listing;
 
-    //
-    // Analysis statistics.
-    //
     std::size_t cfgInstructionCount = 0;
 
     std::size_t codeIslandInstructionCount = 0;
@@ -49,7 +51,8 @@ struct AnalysisEngineResult
     std::size_t TotalInstructionCount() const noexcept
     {
         return
-            controlFlow.instructionAddresses.size();
+            controlFlow.
+                instructionAddresses.size();
     }
 
     [[nodiscard]]
@@ -65,6 +68,13 @@ struct AnalysisEngineResult
     {
         return
             metadata.Symbols().Size();
+    }
+
+    [[nodiscard]]
+    std::size_t RoutineCount() const noexcept
+    {
+        return
+            routines.routines.size();
     }
 
     [[nodiscard]]
@@ -85,10 +95,6 @@ public:
     {
         AnalysisEngineResult result;
 
-        //
-        // AnalysisEngine may safely run
-        // multiple times on the same project.
-        //
         ResetAnalysisState(
             project);
 
@@ -146,7 +152,7 @@ public:
         //
         // Phase 3:
         // symbols + XREF + Atari symbols +
-        // runtime / relocation metadata.
+        // relocation metadata.
         //
         result.metadata.Build(
             project,
@@ -154,7 +160,7 @@ public:
 
         //
         // Phase 4:
-        // CODE / DATA classification.
+        // CODE / DATA.
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -165,7 +171,21 @@ public:
 
         //
         // Phase 5:
-        // build final UI-independent listing.
+        // routines / functions.
+        //
+        RoutineAnalyzer
+            routineAnalyzer;
+
+        result.routines =
+            routineAnalyzer.Analyze(
+                project,
+                result.controlFlow,
+                result.metadata,
+                result.regions);
+
+        //
+        // Phase 6:
+        // final listing model.
         //
         result.listing.Build(
             project,

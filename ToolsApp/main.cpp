@@ -80,29 +80,150 @@ std::string AddressToString(
     return stream.str();
 }
 
+void PrintAddressList(
+    const std::vector<atari::u16>& addresses)
+{
+    if (addresses.empty())
+    {
+        std::cout << "none";
+        return;
+    }
+
+    for (std::size_t i = 0;
+         i < addresses.size();
+         ++i)
+    {
+        if (i != 0)
+        {
+            std::cout << ", ";
+        }
+
+        PrintAddress(
+            addresses[i]);
+    }
+}
+
+void PrintRoutines(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Routines\n"
+        << "=====================================\n";
+
+    if (analysis.routines.routines.empty())
+    {
+        std::cout
+            << "\nNo routines detected.\n";
+
+        return;
+    }
+
+    for (const auto& routine :
+         analysis.routines.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.name
+            << "  ";
+
+        PrintAddress(
+            routine.entryAddress);
+
+        std::cout << " - ";
+
+        PrintAddress(
+            routine.endAddress);
+
+        std::cout
+            << "  "
+            << std::dec
+            << routine.InstructionCount()
+            << " instructions";
+
+        if (routine.projectEntryPoint)
+        {
+            std::cout
+                << "  [ENTRY]";
+        }
+
+        std::cout
+            << "\n  callers:      ";
+
+        PrintAddressList(
+            routine.callers);
+
+        std::cout
+            << "\n  tail callers: ";
+
+        PrintAddressList(
+            routine.tailCallers);
+
+        std::cout
+            << "\n  callees:      ";
+
+        if (routine.callees.empty())
+        {
+            std::cout << "none";
+        }
+        else
+        {
+            for (std::size_t i = 0;
+                 i < routine.callees.size();
+                 ++i)
+            {
+                const auto& callee =
+                    routine.callees[i];
+
+                if (i != 0)
+                {
+                    std::cout << ", ";
+                }
+
+                if (callee.type ==
+                    atari::RoutineCalleeType::TailJump)
+                {
+                    std::cout << "JMP ";
+                }
+                else
+                {
+                    std::cout << "JSR ";
+                }
+
+                PrintAddress(
+                    callee.targetAddress);
+
+                if (callee.relocated)
+                {
+                    std::cout
+                        << " [runtime ";
+
+                    PrintAddress(
+                        callee.encodedTarget);
+
+                    std::cout << ']';
+                }
+            }
+        }
+
+        std::cout << '\n';
+    }
+}
+
 void PrintCodeRow(
     const atari::DisassemblyListingRow& row)
 {
-    //
-    // LABEL
-    //
     std::cout
         << std::left
         << std::setw(12)
         << std::setfill(' ')
         << row.label;
 
-    //
-    // ADDRESS
-    //
     PrintAddress(
         row.address);
 
     std::cout << "  ";
 
-    //
-    // MACHINE CODE
-    //
     for (const atari::u8 value :
          row.bytes)
     {
@@ -117,10 +238,6 @@ void PrintCodeRow(
             << ' ';
     }
 
-    //
-    // 6502 instructions contain no more
-    // than three bytes.
-    //
     for (std::size_t i =
              row.bytes.size();
          i < 3;
@@ -129,9 +246,6 @@ void PrintCodeRow(
         std::cout << "   ";
     }
 
-    //
-    // ASSEMBLY
-    //
     std::cout
         << " "
         << std::left
@@ -139,9 +253,6 @@ void PrintCodeRow(
         << std::setfill(' ')
         << row.instruction;
 
-    //
-    // COMMENT
-    //
     if (!row.comment.empty())
     {
         std::cout
@@ -155,26 +266,17 @@ void PrintCodeRow(
 void PrintDataRow(
     const atari::DisassemblyListingRow& row)
 {
-    //
-    // LABEL
-    //
     std::cout
         << std::left
         << std::setw(12)
         << std::setfill(' ')
         << row.label;
 
-    //
-    // ADDRESS
-    //
     PrintAddress(
         row.address);
 
     std::cout << "  ";
 
-    //
-    // RAW DATA
-    //
     for (const atari::u8 value :
          row.bytes)
     {
@@ -336,11 +438,7 @@ int main(
     const std::filesystem::path filename =
         argv[1];
 
-    //
-    // Load XEX.
-    //
     atari::Project project;
-
     atari::XexLoader loader;
 
     std::cout
@@ -361,9 +459,6 @@ int main(
         return 1;
     }
 
-    //
-    // Complete AtariStudio analysis.
-    //
     atari::AnalysisEngine
         analysisEngine;
 
@@ -374,9 +469,6 @@ int main(
     std::cout
         << "XEX loaded successfully.\n\n";
 
-    //
-    // XEX SEGMENTS
-    //
     const auto& segments =
         project.Segments();
 
@@ -429,9 +521,6 @@ int main(
         std::cout << '\n';
     }
 
-    //
-    // RUNAD / INITAD
-    //
     std::cout
         << "\nRUN address:  ";
 
@@ -442,8 +531,7 @@ int main(
     }
     else
     {
-        std::cout
-            << "not set";
+        std::cout << "not set";
     }
 
     std::cout
@@ -456,13 +544,9 @@ int main(
     }
     else
     {
-        std::cout
-            << "not set";
+        std::cout << "not set";
     }
 
-    //
-    // XEX STATISTICS
-    //
     const auto statistics =
         atari::CalculateProjectStatistics(
             project);
@@ -488,9 +572,6 @@ int main(
         << statistics.totalBytes
         << '\n';
 
-    //
-    // ANALYSIS STATISTICS
-    //
     std::cout
         << "\nAnalysis:\n"
         << "  Entry points:             "
@@ -515,19 +596,19 @@ int main(
         << "  Code/Data regions:        "
         << analysis.regions.size()
         << '\n'
+        << "  Routines:                 "
+        << analysis.RoutineCount()
+        << '\n'
         << "  Listing rows:             "
         << analysis.ListingRowCount()
         << '\n';
 
-    //
-    // RELOCATION MAP
-    //
     PrintRelocationMap(
         analysis);
 
-    //
-    // FINAL LISTING
-    //
+    PrintRoutines(
+        analysis);
+
     PrintListing(
         analysis);
 
