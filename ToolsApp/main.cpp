@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
@@ -12,6 +13,8 @@
 #include <AtariStudio/Atari/AtariSymbols.h>
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
+#include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
+#include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
 #include <AtariStudio/Disassembler/Disassembler.h>
 #include <AtariStudio/Formats/XEX/XexLoader.h>
@@ -56,7 +59,8 @@ const char* SegmentTypeToString(
     }
 }
 
-void PrintAddress(atari::u16 address)
+void PrintAddress(
+    atari::u16 address)
 {
     std::cout
         << '$'
@@ -66,6 +70,22 @@ void PrintAddress(atari::u16 address)
         << std::setw(4)
         << std::setfill('0')
         << address;
+}
+
+std::string AddressToString(
+    atari::u16 address)
+{
+    std::ostringstream stream;
+
+    stream
+        << '$'
+        << std::uppercase
+        << std::hex
+        << std::setw(4)
+        << std::setfill('0')
+        << address;
+
+    return stream.str();
 }
 
 std::string MakeAutomaticLabel(
@@ -112,48 +132,6 @@ std::map<atari::u16, std::string> BuildLabels(
     }
 
     return labels;
-}
-
-void MarkReachedSegments(
-    atari::Project& project,
-    const atari::ControlFlowAnalysisResult& analysis)
-{
-    for (auto& segment :
-         project.Segments())
-    {
-        if (segment.type ==
-            atari::SegmentType::System)
-        {
-            continue;
-        }
-
-        bool reached = false;
-
-        for (const auto address :
-             analysis.instructionAddresses)
-        {
-            if (address >= segment.begin &&
-                address <= segment.end)
-            {
-                reached = true;
-                break;
-            }
-        }
-
-        if (!reached)
-        {
-            continue;
-        }
-
-        segment.type =
-            atari::SegmentType::Code;
-
-        if (segment.name.empty())
-        {
-            segment.name =
-                "Reached code";
-        }
-    }
 }
 
 atari::u16 AbsoluteTarget(
@@ -307,11 +285,9 @@ void PrintInstruction(
     const atari::DisassembledInstruction& instruction,
     const std::map<atari::u16, std::string>& labels)
 {
-    //
-    // LABEL
-    //
     const auto label =
-        labels.find(instruction.address);
+        labels.find(
+            instruction.address);
 
     if (label != labels.end())
     {
@@ -330,17 +306,11 @@ void PrintInstruction(
             << "";
     }
 
-    //
-    // ADDRESS
-    //
     PrintAddress(
         instruction.address);
 
     std::cout << "  ";
 
-    //
-    // MACHINE CODE
-    //
     for (std::size_t i = 0;
          i < instruction.length;
          ++i)
@@ -363,9 +333,6 @@ void PrintInstruction(
         std::cout << "   ";
     }
 
-    //
-    // ASSEMBLY
-    //
     const std::string instructionText =
         FormatInstructionWithLabels(
             instruction,
@@ -378,9 +345,6 @@ void PrintInstruction(
         << std::setfill(' ')
         << instructionText;
 
-    //
-    // Atari OS / hardware symbol comment.
-    //
     const std::string_view comment =
         MakeAtariComment(
             instruction);
@@ -393,6 +357,199 @@ void PrintInstruction(
     }
 
     std::cout << '\n';
+}
+
+void PrintDataRegion(
+    const atari::Memory& memory,
+    const atari::CodeDataRegion& region,
+    const std::map<atari::u16, std::string>& labels)
+{
+    constexpr std::uint32_t bytesPerLine = 8;
+
+    std::uint32_t address =
+        region.begin;
+
+    const std::uint32_t end =
+        region.end;
+
+    while (address <= end)
+    {
+        const auto currentAddress =
+            static_cast<atari::u16>(
+                address);
+
+        const auto label =
+            labels.find(
+                currentAddress);
+
+        if (label != labels.end())
+        {
+            std::cout
+                << std::left
+                << std::setw(12)
+                << std::setfill(' ')
+                << label->second;
+        }
+        else
+        {
+            std::cout
+                << std::left
+                << std::setw(12)
+                << std::setfill(' ')
+                << "";
+        }
+
+        PrintAddress(
+            currentAddress);
+
+        std::cout << "  ";
+
+        for (std::uint32_t i = 0;
+             i < bytesPerLine;
+             ++i)
+        {
+            const std::uint32_t byteAddress =
+                address + i;
+
+            if (byteAddress > end ||
+                byteAddress > 0xFFFF)
+            {
+                break;
+            }
+
+            const auto value =
+                memory.Read8(
+                    static_cast<atari::u16>(
+                        byteAddress));
+
+            std::cout
+                << std::uppercase
+                << std::hex
+                << std::right
+                << std::setw(2)
+                << std::setfill('0')
+                << static_cast<unsigned>(
+                    value)
+                << ' ';
+        }
+
+        std::cout << '\n';
+
+        if (address + bytesPerLine >
+            0xFFFF)
+        {
+            break;
+        }
+
+        address += bytesPerLine;
+    }
+}
+
+void PrintCodeRegion(
+    const atari::Memory& memory,
+    const atari::CodeDataRegion& region,
+    const atari::ControlFlowAnalysisResult& analysis,
+    const std::map<atari::u16, std::string>& labels)
+{
+    atari::Disassembler disassembler;
+
+    const auto beginIterator =
+        std::lower_bound(
+            analysis.instructionAddresses.begin(),
+            analysis.instructionAddresses.end(),
+            region.begin);
+
+    for (auto iterator = beginIterator;
+         iterator !=
+             analysis.instructionAddresses.end();
+         ++iterator)
+    {
+        const atari::u16 address =
+            *iterator;
+
+        if (address > region.end)
+        {
+            break;
+        }
+
+        const auto instruction =
+            disassembler.Decode(
+                memory,
+                address);
+
+        PrintInstruction(
+            instruction,
+            labels);
+    }
+}
+
+void PrintMixedListing(
+    const atari::Project& project,
+    const atari::ControlFlowAnalysisResult& analysis,
+    const std::map<atari::u16, std::string>& labels)
+{
+    atari::CodeDataAnalyzer analyzer;
+
+    const auto regions =
+        analyzer.Analyze(
+            project);
+
+    const auto& memory =
+        project.GetMemory();
+
+    std::cout
+        << "\n=====================================\n"
+        << " Code / Data Listing\n"
+        << "=====================================\n\n";
+
+    std::cout
+        << "LABEL       ADDRESS  BYTES       INSTRUCTION\n"
+        << "---------------------------------------------------------------------\n";
+
+    for (const auto& region :
+         regions)
+    {
+        std::cout << '\n';
+
+        if (region.type ==
+            atari::CodeDataRegionType::Code)
+        {
+            std::cout
+                << "; CODE "
+                << AddressToString(
+                    region.begin)
+                << " - "
+                << AddressToString(
+                    region.end)
+                << '\n';
+
+            PrintCodeRegion(
+                memory,
+                region,
+                analysis,
+                labels);
+        }
+        else
+        {
+            std::cout
+                << "; DATA "
+                << AddressToString(
+                    region.begin)
+                << " - "
+                << AddressToString(
+                    region.end)
+                << " ("
+                << std::dec
+                << region.Size()
+                << " bytes)"
+                << '\n';
+
+            PrintDataRegion(
+                memory,
+                region,
+                labels);
+        }
+    }
 }
 
 } // namespace
@@ -455,17 +612,38 @@ int main(
             project.InitAddress());
     }
 
-    atari::ControlFlowAnalyzer analyzer;
+    //
+    // Phase 1:
+    // normal CFG + relocation analysis.
+    //
+    atari::ControlFlowAnalyzer controlFlowAnalyzer;
 
-    const auto analysis =
-        analyzer.Analyze(
+    auto analysis =
+        controlFlowAnalyzer.Analyze(
             project.GetMemory(),
             entryPoints);
 
-    MarkReachedSegments(
+    const std::size_t normalInstructions =
+        analysis.instructionAddresses.size();
+
+    //
+    // Phase 2:
+    // detect disconnected code islands.
+    //
+    atari::CodeIslandAnalyzer codeIslandAnalyzer;
+
+    codeIslandAnalyzer.Analyze(
         project,
         analysis);
 
+    const std::size_t islandInstructions =
+        analysis.instructionAddresses.size() -
+        normalInstructions;
+
+    //
+    // Labels are built only after all analysis
+    // phases have finished.
+    //
     const auto labels =
         BuildLabels(
             project,
@@ -492,11 +670,13 @@ int main(
             << i
             << "] ";
 
-        PrintAddress(segment.begin);
+        PrintAddress(
+            segment.begin);
 
         std::cout << " - ";
 
-        PrintAddress(segment.end);
+        PrintAddress(
+            segment.end);
 
         std::cout
             << "  "
@@ -575,64 +755,27 @@ int main(
         << '\n';
 
     std::cout
-        << "\n=====================================\n"
-        << " Control Flow Analysis\n"
-        << "=====================================\n";
-
-    std::cout
-        << "Entry points: "
+        << "\nAnalysis:\n"
+        << "  Entry points:           "
         << analysis.entryPoints.size()
-        << '\n';
-
-    for (const auto address :
-         analysis.entryPoints)
-    {
-        std::cout << "  ";
-
-        PrintAddress(address);
-
-        const auto label =
-            labels.find(address);
-
-        if (label != labels.end())
-        {
-            std::cout
-                << "  "
-                << label->second;
-        }
-
-        std::cout << '\n';
-    }
-
-    std::cout
-        << "\nReachable instructions: "
-        << std::dec
+        << '\n'
+        << "  CFG instructions:       "
+        << normalInstructions
+        << '\n'
+        << "  Code-island instructions: "
+        << islandInstructions
+        << '\n'
+        << "  Total instructions:     "
         << analysis.instructionAddresses.size()
         << '\n'
-        << "Generated labels:       "
+        << "  Generated labels:       "
         << labels.size()
-        << "\n\n";
+        << '\n';
 
-    std::cout
-        << "LABEL       ADDRESS  BYTES       INSTRUCTION"
-        << "\n"
-        << "------------------------------------------------------------"
-        << "\n";
-
-    atari::Disassembler disassembler;
-
-    for (const auto address :
-         analysis.instructionAddresses)
-    {
-        const auto instruction =
-            disassembler.Decode(
-                project.GetMemory(),
-                address);
-
-        PrintInstruction(
-            instruction,
-            labels);
-    }
+    PrintMixedListing(
+        project,
+        analysis,
+        labels);
 
     std::cout
         << "\nPress Enter to exit...";
