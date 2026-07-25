@@ -10,30 +10,18 @@
 #include <AtariStudio/Core/Types.h>
 #include <AtariStudio/Cpu6502/Instruction.h>
 #include <AtariStudio/Disassembler/Disassembler.h>
+#include <AtariStudio/Disassembler/RelocationAnalyzer.h>
 
 namespace atari
 {
 
 struct ControlFlowAnalysisResult
 {
-    //
-    // RUNAD / INITAD и другие точки входа.
-    //
     std::vector<u16> entryPoints;
-
-    //
-    // Адреса реально достижимых инструкций.
-    //
     std::vector<u16> instructionAddresses;
-
-    //
-    // Цели переходов:
-    //
-    // JSR
-    // JMP absolute
-    // BCC/BCS/BEQ/BMI/BNE/BPL/BVC/BVS
-    //
     std::vector<u16> targetAddresses;
+
+    RelocationAnalysisResult relocation;
 };
 
 class ControlFlowAnalyzer
@@ -49,46 +37,77 @@ public:
 
         result.entryPoints = entryPoints;
 
-        std::array<bool, MemorySize> scheduled{};
+        //
+        // Сначала ищем relocation/copy loops.
+        //
+        RelocationAnalyzer relocationAnalyzer;
 
+        result.relocation =
+            relocationAnalyzer.Analyze(memory);
+
+        std::array<bool, MemorySize> scheduled{};
         std::deque<u16> workList;
 
-        auto enqueue =
-            [&](u16 address)
+        //
+        // Runtime address -> original XEX address.
+        //
+        const auto resolveAddress =
+            [&](u16 address) -> u16
             {
-                if (scheduled[address])
+                const auto source =
+                    result.relocation.ResolveDestination(
+                        address);
+
+                if (source.has_value() &&
+                    memory.Cell(source.value()).initialized)
                 {
-                    return;
+                    return source.value();
                 }
 
-                if (!memory.Cell(address).initialized)
-                {
-                    return;
-                }
-
-                scheduled[address] = true;
-
-                workList.push_back(address);
+                return address;
             };
 
-        auto addTarget =
+        const auto enqueue =
             [&](u16 address)
             {
-                //
-                // Метку создаём только для адреса,
-                // который реально присутствует
-                // в загруженной памяти.
-                //
-                if (!memory.Cell(address).initialized)
+                const u16 resolvedAddress =
+                    resolveAddress(address);
+
+                if (scheduled[resolvedAddress])
                 {
                     return;
                 }
 
-                result.targetAddresses.push_back(address);
+                if (!memory.Cell(
+                        resolvedAddress).initialized)
+                {
+                    return;
+                }
+
+                scheduled[resolvedAddress] = true;
+
+                workList.push_back(
+                    resolvedAddress);
+            };
+
+        const auto addTarget =
+            [&](u16 address)
+            {
+                const u16 resolvedAddress =
+                    resolveAddress(address);
+
+                if (!memory.Cell(
+                        resolvedAddress).initialized)
+                {
+                    return;
+                }
+
+                result.targetAddresses.push_back(
+                    resolvedAddress);
             };
 
         //
-        // Добавляем точки входа.
+        // RUNAD / INITAD.
         //
         for (const u16 entryPoint : entryPoints)
         {
@@ -96,6 +115,38 @@ public:
             {
                 enqueue(entryPoint);
             }
+        }
+
+        //
+        // IMPORTANT
+        //
+        // Каждый найденный relocation block может
+        // содержать отдельный исполняемый модуль.
+        //
+        // Например hello.xex:
+        //
+        //   $0500 -> $0700
+        //   $0592 -> $0800
+        //
+        // Второй блок невозможно гарантированно
+        // обнаружить только обычным CFG, потому что
+        // вход в него может происходить уже после
+        // перемещения программы или косвенно.
+        //
+        // Поэтому начало каждого source-блока
+        // считаем дополнительной точкой анализа.
+        //
+        for (const auto& range :
+             result.relocation.ranges)
+        {
+            if (!memory.Cell(
+                    range.sourceBegin).initialized)
+            {
+                continue;
+            }
+
+            enqueue(
+                range.sourceBegin);
         }
 
         Disassembler disassembler;
@@ -124,8 +175,8 @@ public:
             }
 
             //
-            // Проверяем, что вся инструкция
-            // находится в загруженной памяти.
+            // Проверяем, что все байты инструкции
+            // действительно загружены.
             //
             bool completeInstruction = true;
 
@@ -134,7 +185,8 @@ public:
                  ++i)
             {
                 const std::uint32_t byteAddress =
-                    static_cast<std::uint32_t>(address) + i;
+                    static_cast<std::uint32_t>(
+                        address) + i;
 
                 if (byteAddress > 0xFFFF)
                 {
@@ -143,7 +195,8 @@ public:
                 }
 
                 if (!memory.Cell(
-                        static_cast<u16>(byteAddress)).initialized)
+                        static_cast<u16>(
+                            byteAddress)).initialized)
                 {
                     completeInstruction = false;
                     break;
@@ -156,33 +209,37 @@ public:
             }
 
             //
-            // Помечаем байты как исполняемые.
+            // Помечаем байты инструкции как CODE.
             //
             for (u16 i = 0;
                  i < instruction.length;
                  ++i)
             {
                 memory.Cell(
-                    static_cast<u16>(address + i)).executable = true;
+                    static_cast<u16>(
+                        address + i)).executable = true;
             }
 
-            result.instructionAddresses.push_back(address);
+            result.instructionAddresses.push_back(
+                address);
 
             const std::uint32_t nextAddress =
-                static_cast<std::uint32_t>(address) +
+                static_cast<std::uint32_t>(
+                    address) +
                 instruction.length;
 
-            auto enqueueNext =
+            const auto enqueueNext =
                 [&]()
                 {
                     if (nextAddress <= 0xFFFF)
                     {
                         enqueue(
-                            static_cast<u16>(nextAddress));
+                            static_cast<u16>(
+                                nextAddress));
                     }
                 };
 
-            auto absoluteTarget =
+            const auto absoluteTarget =
                 [&]() -> u16
                 {
                     return static_cast<u16>(
@@ -192,7 +249,7 @@ public:
                             instruction.bytes[2]) << 8));
                 };
 
-            auto relativeTarget =
+            const auto relativeTarget =
                 [&]() -> u16
                 {
                     const auto offset =
@@ -200,12 +257,15 @@ public:
                             instruction.bytes[1]);
 
                     const std::int32_t target =
-                        static_cast<std::int32_t>(address) +
+                        static_cast<std::int32_t>(
+                            address) +
                         static_cast<std::int32_t>(
                             instruction.length) +
-                        static_cast<std::int32_t>(offset);
+                        static_cast<std::int32_t>(
+                            offset);
 
-                    return static_cast<u16>(target);
+                    return static_cast<u16>(
+                        target);
                 };
 
             switch (instruction.instruction)
@@ -234,7 +294,7 @@ public:
             }
 
             //
-            // Subroutine call.
+            // Subroutine.
             //
             case cpu6502::Instruction::JSR:
             {
@@ -244,17 +304,13 @@ public:
                 addTarget(target);
                 enqueue(target);
 
-                //
-                // После RTS выполнение вернётся
-                // к следующей инструкции.
-                //
                 enqueueNext();
 
                 break;
             }
 
             //
-            // Absolute JMP.
+            // JMP absolute.
             //
             case cpu6502::Instruction::JMP:
             {
@@ -268,9 +324,6 @@ public:
                     enqueue(target);
                 }
 
-                //
-                // JMP indirect пока не разрешаем.
-                //
                 break;
             }
 
@@ -283,17 +336,15 @@ public:
             case cpu6502::Instruction::Illegal:
                 break;
 
-            //
-            // Обычная последовательная инструкция.
-            //
             default:
+
                 enqueueNext();
                 break;
             }
         }
 
         //
-        // Сортируем и удаляем дубликаты.
+        // Sort + unique instructions.
         //
         std::sort(
             result.instructionAddresses.begin(),
@@ -305,6 +356,9 @@ public:
                 result.instructionAddresses.end()),
             result.instructionAddresses.end());
 
+        //
+        // Sort + unique targets.
+        //
         std::sort(
             result.targetAddresses.begin(),
             result.targetAddresses.end());
