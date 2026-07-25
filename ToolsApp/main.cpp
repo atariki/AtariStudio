@@ -6,15 +6,11 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <vector>
 
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
-#include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
-#include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
-#include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
+#include <AtariStudio/Disassembler/AnalysisEngine.h>
 #include <AtariStudio/Disassembler/Disassembler.h>
-#include <AtariStudio/Disassembler/DisassemblyMetadata.h>
 #include <AtariStudio/Formats/XEX/XexLoader.h>
 
 namespace
@@ -90,6 +86,9 @@ void PrintInstruction(
     const atari::DisassembledInstruction& instruction,
     const atari::DisassemblyMetadata& metadata)
 {
+    //
+    // LABEL
+    //
     const std::string* label =
         metadata.Symbols().Find(
             instruction.address);
@@ -111,11 +110,17 @@ void PrintInstruction(
             << "";
     }
 
+    //
+    // ADDRESS
+    //
     PrintAddress(
         instruction.address);
 
     std::cout << "  ";
 
+    //
+    // MACHINE CODE
+    //
     for (std::size_t i = 0;
          i < instruction.length;
          ++i)
@@ -139,6 +144,9 @@ void PrintInstruction(
         std::cout << "   ";
     }
 
+    //
+    // ASSEMBLY
+    //
     const std::string instructionText =
         metadata.FormatInstruction(
             instruction);
@@ -150,6 +158,9 @@ void PrintInstruction(
         << std::setfill(' ')
         << instructionText;
 
+    //
+    // COMMENTS / XREF / RUNTIME
+    //
     const std::string comment =
         metadata.BuildComment(
             instruction);
@@ -169,7 +180,8 @@ void PrintDataRegion(
     const atari::CodeDataRegion& region,
     const atari::DisassemblyMetadata& metadata)
 {
-    constexpr std::uint32_t bytesPerLine = 8;
+    constexpr std::uint32_t
+        bytesPerLine = 8;
 
     std::uint32_t address =
         region.begin;
@@ -183,6 +195,9 @@ void PrintDataRegion(
             static_cast<atari::u16>(
                 address);
 
+        //
+        // LABEL
+        //
         const std::string* label =
             metadata.Symbols().Find(
                 currentAddress);
@@ -204,11 +219,17 @@ void PrintDataRegion(
                 << "";
         }
 
+        //
+        // ADDRESS
+        //
         PrintAddress(
             currentAddress);
 
         std::cout << "  ";
 
+        //
+        // DATA BYTES
+        //
         for (std::uint32_t i = 0;
              i < bytesPerLine;
              ++i)
@@ -254,20 +275,23 @@ void PrintDataRegion(
 void PrintCodeRegion(
     const atari::Memory& memory,
     const atari::CodeDataRegion& region,
-    const atari::ControlFlowAnalysisResult& analysis,
-    const atari::DisassemblyMetadata& metadata)
+    const atari::AnalysisEngineResult& analysis)
 {
     atari::Disassembler disassembler;
 
+    const auto& instructionAddresses =
+        analysis.controlFlow.
+            instructionAddresses;
+
     const auto beginIterator =
         std::lower_bound(
-            analysis.instructionAddresses.begin(),
-            analysis.instructionAddresses.end(),
+            instructionAddresses.begin(),
+            instructionAddresses.end(),
             region.begin);
 
     for (auto iterator = beginIterator;
          iterator !=
-             analysis.instructionAddresses.end();
+             instructionAddresses.end();
          ++iterator)
     {
         const atari::u16 address =
@@ -285,18 +309,18 @@ void PrintCodeRegion(
 
         PrintInstruction(
             instruction,
-            metadata);
+            analysis.metadata);
     }
 }
 
 void PrintRelocationMap(
-    const atari::DisassemblyMetadata& metadata)
+    const atari::AnalysisEngineResult& analysis)
 {
     std::cout
         << "\nRelocation map:\n";
 
     const auto& relocation =
-        metadata.Relocation();
+        analysis.metadata.Relocation();
 
     if (relocation.ranges.empty())
     {
@@ -351,15 +375,8 @@ void PrintRelocationMap(
 
 void PrintMixedListing(
     const atari::Project& project,
-    const atari::ControlFlowAnalysisResult& analysis,
-    const atari::DisassemblyMetadata& metadata)
+    const atari::AnalysisEngineResult& analysis)
 {
-    atari::CodeDataAnalyzer analyzer;
-
-    const auto regions =
-        analyzer.Analyze(
-            project);
-
     const auto& memory =
         project.GetMemory();
 
@@ -372,8 +389,12 @@ void PrintMixedListing(
         << "LABEL       ADDRESS  BYTES       INSTRUCTION\n"
         << "---------------------------------------------------------------------\n";
 
+    //
+    // Regions are already calculated
+    // by AnalysisEngine.
+    //
     for (const auto& region :
-         regions)
+         analysis.regions)
     {
         std::cout << '\n';
 
@@ -392,8 +413,7 @@ void PrintMixedListing(
             PrintCodeRegion(
                 memory,
                 region,
-                analysis,
-                metadata);
+                analysis);
         }
         else
         {
@@ -413,7 +433,7 @@ void PrintMixedListing(
             PrintDataRegion(
                 memory,
                 region,
-                metadata);
+                analysis.metadata);
         }
     }
 }
@@ -441,7 +461,11 @@ int main(
     const std::filesystem::path filename =
         argv[1];
 
+    //
+    // Load project.
+    //
     atari::Project project;
+
     atari::XexLoader loader;
 
     std::cout
@@ -462,53 +486,21 @@ int main(
         return 1;
     }
 
-    std::vector<atari::u16> entryPoints;
+    //
+    // Complete AtariStudio analysis.
+    //
+    atari::AnalysisEngine analysisEngine;
 
-    if (project.RunAddress() != 0)
-    {
-        entryPoints.push_back(
-            project.RunAddress());
-    }
-
-    if (project.InitAddress() != 0 &&
-        project.InitAddress() !=
-            project.RunAddress())
-    {
-        entryPoints.push_back(
-            project.InitAddress());
-    }
-
-    atari::ControlFlowAnalyzer
-        controlFlowAnalyzer;
-
-    auto analysis =
-        controlFlowAnalyzer.Analyze(
-            project.GetMemory(),
-            entryPoints);
-
-    const std::size_t normalInstructions =
-        analysis.instructionAddresses.size();
-
-    atari::CodeIslandAnalyzer
-        codeIslandAnalyzer;
-
-    codeIslandAnalyzer.Analyze(
-        project,
-        analysis);
-
-    const std::size_t islandInstructions =
-        analysis.instructionAddresses.size() -
-        normalInstructions;
-
-    atari::DisassemblyMetadata metadata;
-
-    metadata.Build(
-        project,
-        analysis);
+    const auto analysis =
+        analysisEngine.Analyze(
+            project);
 
     std::cout
         << "XEX loaded successfully.\n\n";
 
+    //
+    // XEX segments.
+    //
     const auto& segments =
         project.Segments();
 
@@ -561,6 +553,9 @@ int main(
         std::cout << '\n';
     }
 
+    //
+    // RUNAD / INITAD.
+    //
     std::cout
         << "\nRUN address:  ";
 
@@ -587,6 +582,9 @@ int main(
         std::cout << "not set";
     }
 
+    //
+    // XEX statistics.
+    //
     const auto statistics =
         atari::CalculateProjectStatistics(
             project);
@@ -612,35 +610,46 @@ int main(
         << statistics.totalBytes
         << '\n';
 
+    //
+    // Analysis statistics.
+    //
     std::cout
         << "\nAnalysis:\n"
         << "  Entry points:             "
-        << analysis.entryPoints.size()
+        << analysis.controlFlow.
+            entryPoints.size()
         << '\n'
         << "  CFG instructions:         "
-        << normalInstructions
+        << analysis.cfgInstructionCount
         << '\n'
         << "  Code-island instructions: "
-        << islandInstructions
+        << analysis.codeIslandInstructionCount
         << '\n'
         << "  Total instructions:       "
-        << analysis.instructionAddresses.size()
+        << analysis.TotalInstructionCount()
         << '\n'
         << "  Cross references:         "
-        << metadata.CrossReferences().
-            references.size()
+        << analysis.CrossReferenceCount()
         << '\n'
         << "  Symbols:                  "
-        << metadata.Symbols().Size()
+        << analysis.SymbolCount()
+        << '\n'
+        << "  Code/Data regions:        "
+        << analysis.regions.size()
         << '\n';
 
+    //
+    // Relocations.
+    //
     PrintRelocationMap(
-        metadata);
+        analysis);
 
+    //
+    // Final listing.
+    //
     PrintMixedListing(
         project,
-        analysis,
-        metadata);
+        analysis);
 
     std::cout
         << "\nPress Enter to exit...";
