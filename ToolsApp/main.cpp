@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <iterator>
 
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
@@ -14,6 +15,10 @@
 
 namespace
 {
+
+// ============================================================
+// Segment helpers
+// ============================================================
 
 const char* SegmentTypeToString(
     atari::SegmentType type)
@@ -51,6 +56,10 @@ const char* SegmentTypeToString(
         return "Unknown";
     }
 }
+
+// ============================================================
+// Edge helpers
+// ============================================================
 
 const char* BasicBlockEdgeTypeToString(
     atari::BasicBlockEdgeType type)
@@ -90,6 +99,10 @@ const char* GraphEdgeTypeToString(
     }
 }
 
+// ============================================================
+// Address helpers
+// ============================================================
+
 void PrintAddress(
     atari::u16 address)
 {
@@ -112,6 +125,7 @@ std::string AddressToString(
         << '$'
         << std::uppercase
         << std::hex
+        << std::right
         << std::setw(4)
         << std::setfill('0')
         << address;
@@ -142,6 +156,74 @@ void PrintAddressList(
     }
 }
 
+// ============================================================
+// Relocation
+// ============================================================
+
+void PrintRelocationMap(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\nRelocation map:\n";
+
+    const auto& relocation =
+        analysis.metadata.Relocation();
+
+    if (relocation.ranges.empty())
+    {
+        std::cout
+            << "  none\n";
+
+        return;
+    }
+
+    for (const auto& range :
+         relocation.ranges)
+    {
+        const std::uint32_t sourceEnd =
+            static_cast<std::uint32_t>(
+                range.sourceBegin) +
+            range.size - 1;
+
+        const std::uint32_t destinationEnd =
+            static_cast<std::uint32_t>(
+                range.destinationBegin) +
+            range.size - 1;
+
+        std::cout << "  ";
+
+        PrintAddress(
+            range.sourceBegin);
+
+        std::cout << " - ";
+
+        PrintAddress(
+            static_cast<atari::u16>(
+                sourceEnd));
+
+        std::cout << "  ->  ";
+
+        PrintAddress(
+            range.destinationBegin);
+
+        std::cout << " - ";
+
+        PrintAddress(
+            static_cast<atari::u16>(
+                destinationEnd));
+
+        std::cout
+            << std::dec
+            << "  ("
+            << range.size
+            << " bytes)\n";
+    }
+}
+
+// ============================================================
+// Routines
+// ============================================================
+
 void PrintRoutines(
     const atari::AnalysisEngineResult& analysis)
 {
@@ -149,6 +231,14 @@ void PrintRoutines(
         << "\n=====================================\n"
         << " Routines\n"
         << "=====================================\n";
+
+    if (analysis.routines.routines.empty())
+    {
+        std::cout
+            << "\nNo routines detected.\n";
+
+        return;
+    }
 
     for (const auto& routine :
          analysis.routines.routines)
@@ -195,7 +285,8 @@ void PrintRoutines(
 
         if (routine.callees.empty())
         {
-            std::cout << "none";
+            std::cout
+                << "none";
         }
         else
         {
@@ -203,22 +294,26 @@ void PrintRoutines(
                  i < routine.callees.size();
                  ++i)
             {
-                if (i != 0)
-                {
-                    std::cout << ", ";
-                }
-
                 const auto& callee =
                     routine.callees[i];
 
-                if (callee.type ==
-                    atari::RoutineCalleeType::TailJump)
+                if (i != 0)
                 {
-                    std::cout << "JMP ";
+                    std::cout
+                        << ", ";
+                }
+
+                if (callee.type ==
+                    atari::RoutineCalleeType::
+                        TailJump)
+                {
+                    std::cout
+                        << "JMP ";
                 }
                 else
                 {
-                    std::cout << "JSR ";
+                    std::cout
+                        << "JSR ";
                 }
 
                 PrintAddress(
@@ -232,7 +327,8 @@ void PrintRoutines(
                     PrintAddress(
                         callee.encodedTarget);
 
-                    std::cout << ']';
+                    std::cout
+                        << ']';
                 }
             }
         }
@@ -241,6 +337,10 @@ void PrintRoutines(
     }
 }
 
+// ============================================================
+// Basic Blocks
+// ============================================================
+
 void PrintBasicBlocks(
     const atari::AnalysisEngineResult& analysis)
 {
@@ -248,6 +348,14 @@ void PrintBasicBlocks(
         << "\n=====================================\n"
         << " Basic Blocks\n"
         << "=====================================\n";
+
+    if (analysis.basicBlocks.routines.empty())
+    {
+        std::cout
+            << "\nNo basic blocks detected.\n";
+
+        return;
+    }
 
     for (const auto& routine :
          analysis.basicBlocks.routines)
@@ -269,12 +377,14 @@ void PrintBasicBlocks(
         for (const auto& block :
              routine.blocks)
         {
-            std::cout << "  ";
+            std::cout
+                << "  ";
 
             PrintAddress(
                 block.beginAddress);
 
-            std::cout << " - ";
+            std::cout
+                << " - ";
 
             PrintAddress(
                 block.endAddress);
@@ -296,7 +406,8 @@ void PrintBasicBlocks(
 
             if (block.successors.empty())
             {
-                std::cout << "none";
+                std::cout
+                    << "none";
             }
             else
             {
@@ -304,13 +415,14 @@ void PrintBasicBlocks(
                      i < block.successors.size();
                      ++i)
                 {
-                    if (i != 0)
-                    {
-                        std::cout << ", ";
-                    }
-
                     const auto& edge =
                         block.successors[i];
+
+                    if (i != 0)
+                    {
+                        std::cout
+                            << ", ";
+                    }
 
                     std::cout
                         << BasicBlockEdgeTypeToString(
@@ -327,6 +439,10 @@ void PrintBasicBlocks(
     }
 }
 
+// ============================================================
+// Control Flow Graphs
+// ============================================================
+
 void PrintControlFlowGraphs(
     const atari::AnalysisEngineResult& analysis)
 {
@@ -334,6 +450,14 @@ void PrintControlFlowGraphs(
         << "\n=====================================\n"
         << " Control Flow Graphs\n"
         << "=====================================\n";
+
+    if (analysis.graphs.routines.empty())
+    {
+        std::cout
+            << "\nNo control flow graphs detected.\n";
+
+        return;
+    }
 
     for (const auto& graph :
          analysis.graphs.routines)
@@ -363,7 +487,8 @@ void PrintControlFlowGraphs(
             PrintAddress(
                 node.address);
 
-            std::cout << " - ";
+            std::cout
+                << " - ";
 
             PrintAddress(
                 node.endAddress);
@@ -392,34 +517,166 @@ void PrintControlFlowGraphs(
             PrintAddressList(
                 node.successors);
 
-            std::cout << '\n';
+            std::cout
+                << '\n';
         }
 
         std::cout
             << "  EDGES:\n";
 
-        for (const auto& edge :
-             graph.edges)
+        if (graph.edges.empty())
         {
             std::cout
-                << "    ";
+                << "    none\n";
+        }
+        else
+        {
+            for (const auto& edge :
+                 graph.edges)
+            {
+                std::cout
+                    << "    ";
 
-            PrintAddress(
-                edge.sourceAddress);
+                PrintAddress(
+                    edge.sourceAddress);
 
-            std::cout
-                << " --"
-                << GraphEdgeTypeToString(
-                    edge.type)
-                << "--> ";
+                std::cout
+                    << " --"
+                    << GraphEdgeTypeToString(
+                        edge.type)
+                    << "--> ";
 
-            PrintAddress(
-                edge.targetAddress);
+                PrintAddress(
+                    edge.targetAddress);
 
-            std::cout << '\n';
+                std::cout
+                    << '\n';
+            }
         }
     }
 }
+
+// ============================================================
+// Dominator Analysis
+// ============================================================
+
+void PrintDominators(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Dominator Analysis\n"
+        << "=====================================\n";
+
+    if (analysis.dominators.routines.empty())
+    {
+        std::cout
+            << "\nNo dominator data.\n";
+
+        return;
+    }
+
+    for (const auto& routine :
+         analysis.dominators.routines)
+    {
+        const auto* graph =
+            analysis.graphs.FindRoutine(
+                routine.routineEntryAddress);
+
+        std::cout << '\n';
+
+        if (graph != nullptr)
+        {
+            std::cout
+                << graph->routineName
+                << "  ";
+        }
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  nodes="
+            << routine.nodes.size()
+            << " back-edges="
+            << routine.backEdges.size()
+            << '\n';
+
+        for (const auto& node :
+             routine.nodes)
+        {
+            std::cout
+                << "  NODE ";
+
+            PrintAddress(
+                node.address);
+
+            std::cout
+                << "\n    idom: ";
+
+            if (node.immediateDominator.has_value())
+            {
+                PrintAddress(
+                    node.immediateDominator.value());
+            }
+            else
+            {
+                std::cout
+                    << "none";
+            }
+
+            std::cout
+                << "\n    depth: "
+                << std::dec
+                << node.depth
+                << "\n    dom: ";
+
+            PrintAddressList(
+                node.dominators);
+
+            std::cout
+                << '\n';
+        }
+
+        std::cout
+            << "  BACK EDGES:\n";
+
+        if (routine.backEdges.empty())
+        {
+            std::cout
+                << "    none\n";
+        }
+        else
+        {
+            for (const auto& edge :
+                 routine.backEdges)
+            {
+                std::cout
+                    << "    ";
+
+                PrintAddress(
+                    edge.sourceAddress);
+
+                std::cout
+                    << " -> ";
+
+                PrintAddress(
+                    edge.targetAddress);
+
+                std::cout
+                    << "  ["
+                    << GraphEdgeTypeToString(
+                        edge.type)
+                    << "]\n";
+            }
+        }
+    }
+}
+
+// ============================================================
+// Listing
+// ============================================================
 
 void PrintCodeRow(
     const atari::DisassemblyListingRow& row)
@@ -433,7 +690,8 @@ void PrintCodeRow(
     PrintAddress(
         row.address);
 
-    std::cout << "  ";
+    std::cout
+        << "  ";
 
     for (const atari::u8 value :
          row.bytes)
@@ -454,11 +712,12 @@ void PrintCodeRow(
          i < 3;
          ++i)
     {
-        std::cout << "   ";
+        std::cout
+            << "   ";
     }
 
     std::cout
-        << " "
+        << ' '
         << std::left
         << std::setw(24)
         << std::setfill(' ')
@@ -471,7 +730,8 @@ void PrintCodeRow(
             << row.comment;
     }
 
-    std::cout << '\n';
+    std::cout
+        << '\n';
 }
 
 void PrintDataRow(
@@ -486,7 +746,8 @@ void PrintDataRow(
     PrintAddress(
         row.address);
 
-    std::cout << "  ";
+    std::cout
+        << "  ";
 
     for (const atari::u8 value :
          row.bytes)
@@ -502,7 +763,8 @@ void PrintDataRow(
             << ' ';
     }
 
-    std::cout << '\n';
+    std::cout
+        << '\n';
 }
 
 void PrintListing(
@@ -520,7 +782,8 @@ void PrintListing(
     for (const auto& region :
          analysis.listing.Regions())
     {
-        std::cout << '\n';
+        std::cout
+            << '\n';
 
         if (region.IsCode())
         {
@@ -566,66 +829,26 @@ void PrintListing(
     }
 }
 
-void PrintRelocationMap(
-    const atari::AnalysisEngineResult& analysis)
-{
-    std::cout
-        << "\nRelocation map:\n";
-
-    for (const auto& range :
-         analysis.metadata.
-             Relocation().ranges)
-    {
-        const std::uint32_t sourceEnd =
-            static_cast<std::uint32_t>(
-                range.sourceBegin) +
-            range.size - 1;
-
-        const std::uint32_t destinationEnd =
-            static_cast<std::uint32_t>(
-                range.destinationBegin) +
-            range.size - 1;
-
-        std::cout << "  ";
-
-        PrintAddress(
-            range.sourceBegin);
-
-        std::cout << " - ";
-
-        PrintAddress(
-            static_cast<atari::u16>(
-                sourceEnd));
-
-        std::cout << "  ->  ";
-
-        PrintAddress(
-            range.destinationBegin);
-
-        std::cout << " - ";
-
-        PrintAddress(
-            static_cast<atari::u16>(
-                destinationEnd));
-
-        std::cout
-            << std::dec
-            << "  ("
-            << range.size
-            << " bytes)\n";
-    }
-}
-
 } // namespace
+
+// ============================================================
+// main
+// ============================================================
 
 int main(
     int argc,
     char* argv[])
 {
+    std::cout
+        << "=====================================\n"
+        << " AtariStudio Test Application\n"
+        << "=====================================\n\n";
+
     if (argc < 2)
     {
         std::cout
-            << "Usage: TestApp <file.xex>\n";
+            << "Usage:\n"
+            << "  TestApp <file.xex>\n";
 
         return 1;
     }
@@ -634,58 +857,240 @@ int main(
         argv[1];
 
     atari::Project project;
+
     atari::XexLoader loader;
+
+    std::cout
+        << "Loading XEX:\n"
+        << filename.string()
+        << "\n\n";
 
     if (!loader.Load(
             filename,
             project))
     {
         std::cerr
-            << "XEX load failed: "
+            << "XEX load failed.\n"
+            << "Error: "
             << loader.LastError()
             << '\n';
 
         return 1;
     }
 
-    atari::AnalysisEngine engine;
+    atari::AnalysisEngine
+        analysisEngine;
 
     const auto analysis =
-        engine.Analyze(
+        analysisEngine.Analyze(
             project);
+
+    std::cout
+        << "XEX loaded successfully.\n\n";
+
+    // ========================================================
+    // Segments
+    // ========================================================
+
+    const auto& segments =
+        project.Segments();
+
+    std::cout
+        << "Segments:\n\n";
+
+    for (std::size_t i = 0;
+         i < segments.size();
+         ++i)
+    {
+        const auto& segment =
+            segments[i];
+
+        std::cout
+            << "  ["
+            << std::dec
+            << i
+            << "] ";
+
+        PrintAddress(
+            segment.begin);
+
+        std::cout
+            << " - ";
+
+        PrintAddress(
+            segment.end);
+
+        std::cout
+            << "  "
+            << SegmentTypeToString(
+                segment.type)
+            << "  "
+            << std::dec
+            << segment.Size()
+            << " bytes";
+
+        if (!segment.name.empty())
+        {
+            std::cout
+                << "  "
+                << segment.name;
+        }
+
+        if (segment.overlapping)
+        {
+            std::cout
+                << "  [OVERLAP]";
+        }
+
+        std::cout
+            << '\n';
+    }
+
+    // ========================================================
+    // RUN / INIT
+    // ========================================================
+
+    std::cout
+        << "\nRUN address:  ";
+
+    if (project.RunAddress() != 0)
+    {
+        PrintAddress(
+            project.RunAddress());
+    }
+    else
+    {
+        std::cout
+            << "not set";
+    }
+
+    std::cout
+        << "\nINIT address: ";
+
+    if (project.InitAddress() != 0)
+    {
+        PrintAddress(
+            project.InitAddress());
+    }
+    else
+    {
+        std::cout
+            << "not set";
+    }
+
+    std::cout
+        << '\n';
+
+    // ========================================================
+    // Project statistics
+    // ========================================================
 
     const auto statistics =
         atari::CalculateProjectStatistics(
             project);
 
-    std::cout << std::dec;
+    //
+    // PrintAddress() leaves std::cout in HEX mode.
+    // All counters below must be decimal.
+    //
+    std::cout
+        << std::dec;
 
     std::cout
-        << "Analysis:\n"
-        << "  Segments:             "
+        << "\nXEX Statistics:\n"
+        << "  Segments:     "
         << statistics.segmentCount
         << '\n'
-        << "  Instructions:         "
+        << "  Code:         "
+        << statistics.codeSegments
+        << '\n'
+        << "  Data:         "
+        << statistics.dataSegments
+        << '\n'
+        << "  System:       "
+        << statistics.systemSegments
+        << '\n'
+        << "  Unknown:      "
+        << statistics.unknownSegments
+        << '\n'
+        << "  Charset:      "
+        << statistics.charsetSegments
+        << '\n'
+        << "  Screen:       "
+        << statistics.screenSegments
+        << '\n'
+        << "  DisplayList:  "
+        << statistics.displayListSegments
+        << '\n'
+        << "  Hardware:     "
+        << statistics.hardwareSegments
+        << '\n'
+        << "  ZeroPage:     "
+        << statistics.zeroPageSegments
+        << '\n'
+        << "  Overlapping:  "
+        << statistics.overlappingSegments
+        << '\n'
+        << "  Total bytes:  "
+        << statistics.totalBytes
+        << '\n';
+
+    // ========================================================
+    // Analysis statistics
+    // ========================================================
+
+    std::cout
+        << std::dec;
+
+    std::cout
+        << "\nAnalysis:\n"
+        << "  Entry points:             "
+        << analysis.controlFlow.
+            entryPoints.size()
+        << '\n'
+        << "  CFG instructions:         "
+        << analysis.cfgInstructionCount
+        << '\n'
+        << "  Code-island instructions: "
+        << analysis.codeIslandInstructionCount
+        << '\n'
+        << "  Total instructions:       "
         << analysis.TotalInstructionCount()
         << '\n'
-        << "  Routines:             "
-        << analysis.RoutineCount()
-        << '\n'
-        << "  Basic blocks:         "
-        << analysis.BasicBlockCount()
-        << '\n'
-        << "  CFG nodes:            "
-        << analysis.GraphNodeCount()
-        << '\n'
-        << "  CFG edges:            "
-        << analysis.GraphEdgeCount()
-        << '\n'
-        << "  Cross references:     "
+        << "  Cross references:         "
         << analysis.CrossReferenceCount()
         << '\n'
-        << "  Listing rows:         "
+        << "  Symbols:                  "
+        << analysis.SymbolCount()
+        << '\n'
+        << "  Code/Data regions:        "
+        << analysis.regions.size()
+        << '\n'
+        << "  Routines:                 "
+        << analysis.RoutineCount()
+        << '\n'
+        << "  Basic blocks:             "
+        << analysis.BasicBlockCount()
+        << '\n'
+        << "  CFG nodes:                "
+        << analysis.GraphNodeCount()
+        << '\n'
+        << "  CFG edges:                "
+        << analysis.GraphEdgeCount()
+        << '\n'
+        << "  Dominator nodes:          "
+        << analysis.DominatorNodeCount()
+        << '\n'
+        << "  Back edges:               "
+        << analysis.BackEdgeCount()
+        << '\n'
+        << "  Listing rows:             "
         << analysis.ListingRowCount()
         << '\n';
+
+    // ========================================================
+    // Detailed output
+    // ========================================================
 
     PrintRelocationMap(
         analysis);
@@ -699,8 +1104,20 @@ int main(
     PrintControlFlowGraphs(
         analysis);
 
+    PrintDominators(
+        analysis);
+
     PrintListing(
         analysis);
 
+    //
+    // Important:
+    //
+    // Do NOT add std::cin.get() here.
+    //
+    // TestApp must terminate automatically.
+    // Otherwise TestApp.exe remains locked and MSVC linker
+    // produces LNK1168 on the next build.
+    //
     return 0;
 }

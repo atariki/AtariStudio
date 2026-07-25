@@ -12,6 +12,7 @@
 #include <AtariStudio/Disassembler/ControlFlowGraph.h>
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
+#include <AtariStudio/Disassembler/DominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
 
 namespace atari
@@ -19,40 +20,20 @@ namespace atari
 
 struct AnalysisEngineResult
 {
-    //
-    // Control-flow analysis + relocation.
-    //
     ControlFlowAnalysisResult controlFlow;
 
-    //
-    // Symbols, XREF, Atari symbols,
-    // runtime / relocation comments.
-    //
     DisassemblyMetadata metadata;
 
-    //
-    // CODE / DATA regions.
-    //
     std::vector<CodeDataRegion> regions;
 
-    //
-    // Detected routines.
-    //
     RoutineAnalysisResult routines;
 
-    //
-    // Basic blocks.
-    //
     BasicBlockAnalysisResult basicBlocks;
 
-    //
-    // Final CFG model.
-    //
     ControlFlowGraphAnalysisResult graphs;
 
-    //
-    // GUI-independent listing.
-    //
+    DominatorAnalysisResult dominators;
+
     DisassemblyListing listing;
 
     std::size_t cfgInstructionCount = 0;
@@ -111,6 +92,20 @@ struct AnalysisEngineResult
     }
 
     [[nodiscard]]
+    std::size_t DominatorNodeCount() const noexcept
+    {
+        return
+            dominators.NodeCount();
+    }
+
+    [[nodiscard]]
+    std::size_t BackEdgeCount() const noexcept
+    {
+        return
+            dominators.BackEdgeCount();
+    }
+
+    [[nodiscard]]
     std::size_t ListingRowCount() const noexcept
     {
         return
@@ -131,9 +126,6 @@ public:
         ResetAnalysisState(
             project);
 
-        //
-        // Initial entry points.
-        //
         std::vector<u16> entryPoints;
 
         if (project.RunAddress() != 0)
@@ -152,7 +144,7 @@ public:
 
         //
         // Phase 1:
-        // CFG + relocation.
+        // Control flow + relocation.
         //
         ControlFlowAnalyzer
             controlFlowAnalyzer;
@@ -168,7 +160,7 @@ public:
 
         //
         // Phase 2:
-        // disconnected code islands.
+        // Disconnected code islands.
         //
         CodeIslandAnalyzer
             codeIslandAnalyzer;
@@ -184,7 +176,7 @@ public:
 
         //
         // Phase 3:
-        // symbols + XREF.
+        // Symbols + XREF.
         //
         result.metadata.Build(
             project,
@@ -192,7 +184,7 @@ public:
 
         //
         // Phase 4:
-        // CODE / DATA.
+        // CODE / DATA classification.
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -203,7 +195,7 @@ public:
 
         //
         // Phase 5:
-        // routines.
+        // Routines.
         //
         RoutineAnalyzer
             routineAnalyzer;
@@ -217,7 +209,7 @@ public:
 
         //
         // Phase 6:
-        // basic blocks.
+        // Basic blocks.
         //
         BasicBlockAnalyzer
             basicBlockAnalyzer;
@@ -241,7 +233,18 @@ public:
 
         //
         // Phase 8:
-        // listing.
+        // Dominators + back edges.
+        //
+        DominatorAnalyzer
+            dominatorAnalyzer;
+
+        result.dominators =
+            dominatorAnalyzer.Analyze(
+                result.graphs);
+
+        //
+        // Phase 9:
+        // Listing.
         //
         result.listing.Build(
             project,
