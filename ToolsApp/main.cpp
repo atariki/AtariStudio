@@ -1,60 +1,308 @@
+#include <filesystem>
+#include <iomanip>
 #include <iostream>
+#include <vector>
 
-#include <AtariStudio/Core/Memory.h>
-#include <AtariStudio/Disassembler/Listing.h>
+#include <AtariStudio/Core/Project.h>
+#include <AtariStudio/Core/ProjectStatistics.h>
+#include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
+#include <AtariStudio/Disassembler/Disassembler.h>
+#include <AtariStudio/Formats/XEX/XexLoader.h>
 
-int main()
+namespace
+{
+
+const char* SegmentTypeToString(atari::SegmentType type)
+{
+    switch (type)
+    {
+    case atari::SegmentType::Unknown:
+        return "Unknown";
+
+    case atari::SegmentType::Code:
+        return "Code";
+
+    case atari::SegmentType::Data:
+        return "Data";
+
+    case atari::SegmentType::Charset:
+        return "Charset";
+
+    case atari::SegmentType::Screen:
+        return "Screen";
+
+    case atari::SegmentType::DisplayList:
+        return "DisplayList";
+
+    case atari::SegmentType::Hardware:
+        return "Hardware";
+
+    case atari::SegmentType::ZeroPage:
+        return "ZeroPage";
+
+    case atari::SegmentType::System:
+        return "System";
+
+    default:
+        return "Unknown";
+    }
+}
+
+void PrintAddress(uint16_t address)
+{
+    std::cout
+        << '$'
+        << std::uppercase
+        << std::hex
+        << std::setw(4)
+        << std::setfill('0')
+        << address;
+}
+
+} // namespace
+
+int main(int argc, char* argv[])
 {
     std::cout << "=====================================\n";
     std::cout << " AtariStudio Test Application\n";
     std::cout << "=====================================\n\n";
 
-    atari::Memory memory;
-
-    //
-    // Test program at $2000:
-    //
-    // 2000: A9 44      LDA #$44
-    // 2002: 8D 00 D0   STA $D000
-    // 2005: A2 10      LDX #$10
-    // 2007: CA         DEX
-    // 2008: D0 FD      BNE $2007
-    // 200A: 60         RTS
-    //
-
-    memory.Write8(0x2000, 0xA9);
-    memory.Write8(0x2001, 0x44);
-
-    memory.Write8(0x2002, 0x8D);
-    memory.Write8(0x2003, 0x00);
-    memory.Write8(0x2004, 0xD0);
-
-    memory.Write8(0x2005, 0xA2);
-    memory.Write8(0x2006, 0x10);
-
-    memory.Write8(0x2007, 0xCA);
-
-    memory.Write8(0x2008, 0xD0);
-    memory.Write8(0x2009, 0xFD);
-
-    memory.Write8(0x200A, 0x60);
-
-    atari::Listing listing;
-
-    const auto instructions =
-        listing.Build(
-            memory,
-            0x2000,
-            0x200A);
-
-    const auto lines =
-        listing.Format(instructions);
-
-    std::cout << "Disassembly:\n\n";
-
-    for (const auto& line : lines)
+    if (argc < 2)
     {
-        std::cout << line << '\n';
+        std::cout << "Usage:\n";
+        std::cout << "  TestApp <file.xex>\n";
+        return 1;
+    }
+
+    const std::filesystem::path filename = argv[1];
+
+    atari::Project project;
+    atari::XexLoader loader;
+
+    std::cout << "Loading XEX:\n";
+    std::cout << filename.string() << "\n\n";
+
+    if (!loader.Load(filename, project))
+    {
+        std::cerr
+            << "XEX load failed.\n"
+            << "Error: "
+            << loader.LastError()
+            << '\n';
+
+        return 1;
+    }
+
+    std::cout << "XEX loaded successfully.\n\n";
+
+    const auto& segments = project.Segments();
+
+    //
+    // Segments
+    //
+    std::cout << "Segments:\n\n";
+
+    for (std::size_t i = 0; i < segments.size(); ++i)
+    {
+        const auto& segment = segments[i];
+
+        std::cout
+            << "  ["
+            << std::dec
+            << i
+            << "] ";
+
+        PrintAddress(segment.begin);
+
+        std::cout << " - ";
+
+        PrintAddress(segment.end);
+
+        std::cout
+            << "  "
+            << SegmentTypeToString(segment.type)
+
+            << "  "
+            << std::dec
+            << segment.Size()
+            << " bytes";
+
+        if (!segment.name.empty())
+        {
+            std::cout
+                << "  "
+                << segment.name;
+        }
+
+        if (segment.overlapping)
+        {
+            std::cout << "  [OVERLAP]";
+        }
+
+        std::cout << '\n';
+    }
+
+    //
+    // RUNAD / INITAD
+    //
+    std::cout << "\nRUN address:  ";
+
+    if (project.RunAddress() != 0)
+    {
+        PrintAddress(project.RunAddress());
+    }
+    else
+    {
+        std::cout << "not set";
+    }
+
+    std::cout << "\nINIT address: ";
+
+    if (project.InitAddress() != 0)
+    {
+        PrintAddress(project.InitAddress());
+    }
+    else
+    {
+        std::cout << "not set";
+    }
+
+    //
+    // Statistics
+    //
+    const auto statistics =
+        atari::CalculateProjectStatistics(project);
+
+    std::cout << "\n\nXEX Statistics:\n";
+
+    std::cout
+        << "  Segments:     "
+        << statistics.segmentCount
+        << '\n';
+
+    std::cout
+        << "  Code:         "
+        << statistics.codeSegments
+        << '\n';
+
+    std::cout
+        << "  System:       "
+        << statistics.systemSegments
+        << '\n';
+
+    std::cout
+        << "  Unknown:      "
+        << statistics.unknownSegments
+        << '\n';
+
+    std::cout
+        << "  Overlapping:  "
+        << statistics.overlappingSegments
+        << '\n';
+
+    std::cout
+        << "  Total bytes:  "
+        << statistics.totalBytes
+        << '\n';
+
+    //
+    // Entry points for control-flow analysis.
+    //
+    std::vector<atari::u16> entryPoints;
+
+    if (project.RunAddress() != 0)
+    {
+        entryPoints.push_back(
+            project.RunAddress());
+    }
+
+    if (project.InitAddress() != 0 &&
+        project.InitAddress() != project.RunAddress())
+    {
+        entryPoints.push_back(
+            project.InitAddress());
+    }
+
+    //
+    // Control-flow analysis
+    //
+    atari::ControlFlowAnalyzer analyzer;
+
+    auto analysis =
+        analyzer.Analyze(
+            project.GetMemory(),
+            entryPoints);
+
+    std::cout << "\n=====================================\n";
+    std::cout << " Control Flow Analysis\n";
+    std::cout << "=====================================\n";
+
+    std::cout
+        << "Entry points: "
+        << analysis.entryPoints.size()
+        << '\n';
+
+    for (const auto address : analysis.entryPoints)
+    {
+        std::cout << "  ";
+
+        PrintAddress(address);
+
+        std::cout << '\n';
+    }
+
+    std::cout
+        << "\nReachable instructions: "
+        << std::dec
+        << analysis.instructionAddresses.size()
+        << "\n\n";
+
+    //
+    // Print only instructions actually reached
+    // by control-flow analysis.
+    //
+    atari::Disassembler disassembler;
+
+    for (const auto address :
+         analysis.instructionAddresses)
+    {
+        const auto instruction =
+            disassembler.Decode(
+                project.GetMemory(),
+                address);
+
+        PrintAddress(address);
+
+        std::cout << ": ";
+
+        for (std::size_t i = 0;
+             i < instruction.length;
+             ++i)
+        {
+            std::cout
+                << std::uppercase
+                << std::hex
+                << std::setw(2)
+                << std::setfill('0')
+                << static_cast<unsigned>(
+                    instruction.bytes[i])
+                << ' ';
+        }
+
+        //
+        // Выравниваем колонку мнемоники.
+        //
+        for (std::size_t i = instruction.length;
+             i < 3;
+             ++i)
+        {
+            std::cout << "   ";
+        }
+
+        std::cout
+            << "  "
+            << instruction.text
+            << '\n';
     }
 
     std::cout << "\nPress Enter to exit...";

@@ -41,6 +41,12 @@ namespace atari
             return m_segments;
         }
 
+        [[nodiscard]]
+        std::vector<Segment>& Segments() noexcept
+        {
+            return m_segments;
+        }
+
         //----- RUNAD --------------------------------------------------------------
 
         void SetRunAddress(uint16_t address) noexcept

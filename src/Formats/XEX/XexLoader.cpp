@@ -5,10 +5,8 @@
 #include <AtariStudio/Core/Segment.h>
 
 #include <fstream>
-
 #include <stdexcept>
 #include <utility>
-
 
 namespace atari
 {
@@ -23,21 +21,79 @@ namespace atari
             const int hi = stream.get();
 
             if (lo == EOF || hi == EOF)
+            {
                 throw std::runtime_error("Unexpected end of file.");
+            }
 
-            return static_cast<uint16_t>(lo | (hi << 8));
+            return static_cast<uint16_t>(
+                static_cast<uint16_t>(lo) |
+                (static_cast<uint16_t>(hi) << 8));
         }
 
-    }
+        void MarkCodeSegment(
+            Project& project,
+            uint16_t address,
+            const char* name)
+        {
+            if (address == 0)
+            {
+                return;
+            }
 
-    bool XexLoader::Load(const std::filesystem::path& filename,
+            for (auto& segment : project.Segments())
+            {
+                if (segment.type == SegmentType::System)
+                {
+                    continue;
+                }
+
+                if (address >= segment.begin &&
+                    address <= segment.end)
+                {
+                    segment.type = SegmentType::Code;
+
+                    if (segment.name.empty())
+                    {
+                        segment.name = name;
+                    }
+
+                    return;
+                }
+            }
+        }
+
+        bool OverlapsExistingSegment(
+            const Project& project,
+            uint16_t begin,
+            uint16_t end)
+        {
+            for (const auto& existing : project.Segments())
+            {
+                const bool overlaps =
+                    !(end < existing.begin ||
+                        begin > existing.end);
+
+                if (overlaps)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+    } // namespace
+
+    bool XexLoader::Load(
+        const std::filesystem::path& filename,
         Project& project)
     {
         project.Clear();
-
         m_lastError.clear();
 
-        std::ifstream file(filename, std::ios::binary);
+        std::ifstream file(
+            filename,
+            std::ios::binary);
 
         if (!file)
         {
@@ -54,17 +110,19 @@ namespace atari
                 uint16_t start = ReadWord(file);
 
                 //
-                // Skip any number of FFFF markers
+                // XEX may contain one or more $FFFF markers.
                 //
                 while (start == 0xFFFF)
                 {
                     if (file.peek() == EOF)
+                    {
                         return true;
+                    }
 
                     start = ReadWord(file);
                 }
 
-                uint16_t end = ReadWord(file);
+                const uint16_t end = ReadWord(file);
 
                 if (end < start)
                 {
@@ -73,15 +131,48 @@ namespace atari
                 }
 
                 Segment segment;
+
                 segment.begin = start;
                 segment.end = end;
                 segment.type = SegmentType::Unknown;
 
+                //
+                // RUNAD
+                //
+                if (start == 0x02E0 &&
+                    end == 0x02E1)
+                {
+                    segment.type = SegmentType::System;
+                    segment.name = "RUNAD";
+                }
+
+                //
+                // INITAD
+                //
+                else if (start == 0x02E2 &&
+                    end == 0x02E3)
+                {
+                    segment.type = SegmentType::System;
+                    segment.name = "INITAD";
+                }
+
+                //
+                // Detect overlap with previously loaded segments.
+                //
+                segment.overlapping =
+                    OverlapsExistingSegment(
+                        project,
+                        segment.begin,
+                        segment.end);
+
                 project.AddSegment(segment);
 
                 const uint32_t size =
-                    static_cast<uint32_t>(end - start + 1);
+                    static_cast<uint32_t>(end - start) + 1;
 
+                //
+                // Load bytes into Atari memory.
+                //
                 for (uint32_t i = 0; i < size; ++i)
                 {
                     const int value = file.get();
@@ -105,22 +196,37 @@ namespace atari
         }
 
         //
-        // Extract RUNAD ($02E0-$02E1)
+        // RUNAD
         //
         if (memory.Cell(0x02E0).initialized &&
             memory.Cell(0x02E1).initialized)
         {
-            project.SetRunAddress(memory.Read16(0x02E0));
+            project.SetRunAddress(
+                memory.Read16(0x02E0));
         }
 
         //
-        // Extract INITAD ($02E2-$02E3)
+        // INITAD
         //
         if (memory.Cell(0x02E2).initialized &&
             memory.Cell(0x02E3).initialized)
         {
-            project.SetInitAddress(memory.Read16(0x02E2));
+            project.SetInitAddress(
+                memory.Read16(0x02E2));
         }
+
+        //
+        // Mark known executable segments.
+        //
+        MarkCodeSegment(
+            project,
+            project.RunAddress(),
+            "Main code");
+
+        MarkCodeSegment(
+            project,
+            project.InitAddress(),
+            "Init code");
 
         return true;
     }
@@ -135,4 +241,4 @@ namespace atari
         m_lastError = std::move(message);
     }
 
-}
+} // namespace atari
