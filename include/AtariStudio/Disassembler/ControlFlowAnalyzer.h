@@ -16,8 +16,24 @@ namespace atari
 
 struct ControlFlowAnalysisResult
 {
+    //
+    // RUNAD / INITAD и другие точки входа.
+    //
     std::vector<u16> entryPoints;
+
+    //
+    // Адреса реально достижимых инструкций.
+    //
     std::vector<u16> instructionAddresses;
+
+    //
+    // Цели переходов:
+    //
+    // JSR
+    // JMP absolute
+    // BCC/BCS/BEQ/BMI/BNE/BPL/BVC/BVS
+    //
+    std::vector<u16> targetAddresses;
 };
 
 class ControlFlowAnalyzer
@@ -34,6 +50,7 @@ public:
         result.entryPoints = entryPoints;
 
         std::array<bool, MemorySize> scheduled{};
+
         std::deque<u16> workList;
 
         auto enqueue =
@@ -50,9 +67,29 @@ public:
                 }
 
                 scheduled[address] = true;
+
                 workList.push_back(address);
             };
 
+        auto addTarget =
+            [&](u16 address)
+            {
+                //
+                // Метку создаём только для адреса,
+                // который реально присутствует
+                // в загруженной памяти.
+                //
+                if (!memory.Cell(address).initialized)
+                {
+                    return;
+                }
+
+                result.targetAddresses.push_back(address);
+            };
+
+        //
+        // Добавляем точки входа.
+        //
         for (const u16 entryPoint : entryPoints)
         {
             if (entryPoint != 0)
@@ -65,8 +102,15 @@ public:
 
         while (!workList.empty())
         {
-            const u16 address = workList.front();
+            const u16 address =
+                workList.front();
+
             workList.pop_front();
+
+            if (!memory.Cell(address).initialized)
+            {
+                continue;
+            }
 
             const auto instruction =
                 disassembler.Decode(
@@ -79,6 +123,10 @@ public:
                 continue;
             }
 
+            //
+            // Проверяем, что вся инструкция
+            // находится в загруженной памяти.
+            //
             bool completeInstruction = true;
 
             for (u16 i = 0;
@@ -107,6 +155,9 @@ public:
                 continue;
             }
 
+            //
+            // Помечаем байты как исполняемые.
+            //
             for (u16 i = 0;
                  i < instruction.length;
                  ++i)
@@ -150,14 +201,18 @@ public:
 
                     const std::int32_t target =
                         static_cast<std::int32_t>(address) +
-                        instruction.length +
-                        offset;
+                        static_cast<std::int32_t>(
+                            instruction.length) +
+                        static_cast<std::int32_t>(offset);
 
                     return static_cast<u16>(target);
                 };
 
             switch (instruction.instruction)
             {
+            //
+            // Conditional branches.
+            //
             case cpu6502::Instruction::BCC:
             case cpu6502::Instruction::BCS:
             case cpu6502::Instruction::BEQ:
@@ -166,39 +221,80 @@ public:
             case cpu6502::Instruction::BPL:
             case cpu6502::Instruction::BVC:
             case cpu6502::Instruction::BVS:
+            {
+                const u16 target =
+                    relativeTarget();
 
-                enqueue(relativeTarget());
+                addTarget(target);
+                enqueue(target);
+
                 enqueueNext();
-                break;
 
+                break;
+            }
+
+            //
+            // Subroutine call.
+            //
             case cpu6502::Instruction::JSR:
+            {
+                const u16 target =
+                    absoluteTarget();
 
-                enqueue(absoluteTarget());
+                addTarget(target);
+                enqueue(target);
+
+                //
+                // После RTS выполнение вернётся
+                // к следующей инструкции.
+                //
                 enqueueNext();
+
                 break;
+            }
 
+            //
+            // Absolute JMP.
+            //
             case cpu6502::Instruction::JMP:
-
+            {
                 if (instruction.addressMode ==
                     cpu6502::AddressMode::Absolute)
                 {
-                    enqueue(absoluteTarget());
+                    const u16 target =
+                        absoluteTarget();
+
+                    addTarget(target);
+                    enqueue(target);
                 }
 
+                //
+                // JMP indirect пока не разрешаем.
+                //
                 break;
+            }
 
+            //
+            // Конец текущего пути.
+            //
             case cpu6502::Instruction::RTS:
             case cpu6502::Instruction::RTI:
             case cpu6502::Instruction::BRK:
             case cpu6502::Instruction::Illegal:
                 break;
 
+            //
+            // Обычная последовательная инструкция.
+            //
             default:
                 enqueueNext();
                 break;
             }
         }
 
+        //
+        // Сортируем и удаляем дубликаты.
+        //
         std::sort(
             result.instructionAddresses.begin(),
             result.instructionAddresses.end());
@@ -208,6 +304,16 @@ public:
                 result.instructionAddresses.begin(),
                 result.instructionAddresses.end()),
             result.instructionAddresses.end());
+
+        std::sort(
+            result.targetAddresses.begin(),
+            result.targetAddresses.end());
+
+        result.targetAddresses.erase(
+            std::unique(
+                result.targetAddresses.begin(),
+                result.targetAddresses.end()),
+            result.targetAddresses.end());
 
         return result;
     }
