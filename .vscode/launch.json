@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "AtariStudio - Build and Run",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}\\build\\ToolsApp\\Debug\\TestApp.exe",
+            "args": [
+                "${workspaceFolder}\\hello.xex"
+            ],
+            "cwd": "${workspaceFolder}",
+            "stopAtEntry": false,
+            "console": "integratedTerminal",
+            "preLaunchTask": "Build AtariStudio Debug"
+        }
+    ]
+}

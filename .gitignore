@@ -1,46 +1,60 @@
+# =========================
+# Build directories
+# =========================
 
-# Visual Studio
-.vs/
-.vscode/
-*.VC.db
-*.VC.opendb
-
-# CMake
-out/
 build/
-cmake-build-*/
+out/
+
+# =========================
+# Visual Studio
+# =========================
+
+.vs/
+*.sln
+*.slnx
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+
+# =========================
+# CMake
+# =========================
+
 CMakeCache.txt
 CMakeFiles/
-Makefile
-compile_commands.json
-Testing/
+cmake_install.cmake
+CTestTestfile.cmake
 
-# Visual Studio build
-Debug/
-Release/
-x64/
-x86/
-Win32/
+# =========================
+# Compiled files
+# =========================
 
-# User files
-*.user
-*.suo
-*.userosscache
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.ilk
 
-# Logs
-*.log
+# =========================
+# Atari test binaries
+# =========================
 
-# Temporary
+*.xex
+*.ex
+
+# =========================
+# Temporary files
+# =========================
+
 *.tmp
 *.bak
+*.log
+*~
 
-# Qt
-moc_*
-ui_*.h
-qrc_*.cpp
+# =========================
+# OS files
+# =========================
 
-# macOS
+Thumbs.db
 .DS_Store
-
-# Linux
-*.swp
