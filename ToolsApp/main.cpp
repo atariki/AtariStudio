@@ -90,6 +90,22 @@ const char* GraphEdgeTypeToString(
     }
 }
 
+const char* ConditionalRegionKindToString(
+    atari::ConditionalRegionKind kind)
+{
+    switch (kind)
+    {
+    case atari::ConditionalRegionKind::IfThen:
+        return "if";
+
+    case atari::ConditionalRegionKind::IfElse:
+        return "if-else";
+
+    default:
+        return "?";
+    }
+}
+
 void PrintAddress(
     atari::u16 address)
 {
@@ -235,8 +251,7 @@ void PrintRoutines(
 
         if (routine.projectEntryPoint)
         {
-            std::cout
-                << "  [ENTRY]";
+            std::cout << "  [ENTRY]";
         }
 
         std::cout
@@ -256,8 +271,7 @@ void PrintRoutines(
 
         if (routine.callees.empty())
         {
-            std::cout
-                << "none";
+            std::cout << "none";
         }
         else
         {
@@ -267,24 +281,20 @@ void PrintRoutines(
             {
                 if (i != 0)
                 {
-                    std::cout
-                        << ", ";
+                    std::cout << ", ";
                 }
 
                 const auto& callee =
                     routine.callees[i];
 
                 if (callee.type ==
-                    atari::RoutineCalleeType::
-                        TailJump)
+                    atari::RoutineCalleeType::TailJump)
                 {
-                    std::cout
-                        << "JMP ";
+                    std::cout << "JMP ";
                 }
                 else
                 {
-                    std::cout
-                        << "JSR ";
+                    std::cout << "JSR ";
                 }
 
                 PrintAddress(
@@ -298,8 +308,7 @@ void PrintRoutines(
                     PrintAddress(
                         callee.encodedTarget);
 
-                    std::cout
-                        << ']';
+                    std::cout << ']';
                 }
             }
         }
@@ -354,8 +363,7 @@ void PrintBasicBlocks(
 
             if (block.terminal)
             {
-                std::cout
-                    << "  [terminal]";
+                std::cout << "  [terminal]";
             }
 
             std::cout
@@ -363,8 +371,7 @@ void PrintBasicBlocks(
 
             if (block.successors.empty())
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
             else
             {
@@ -374,8 +381,7 @@ void PrintBasicBlocks(
                 {
                     if (i != 0)
                     {
-                        std::cout
-                            << ", ";
+                        std::cout << ", ";
                     }
 
                     const auto& edge =
@@ -439,14 +445,12 @@ void PrintControlFlowGraphs(
 
             if (node.entry)
             {
-                std::cout
-                    << " [entry]";
+                std::cout << " [entry]";
             }
 
             if (node.terminal)
             {
-                std::cout
-                    << " [terminal]";
+                std::cout << " [terminal]";
             }
 
             std::cout
@@ -469,16 +473,14 @@ void PrintControlFlowGraphs(
 
         if (graph.edges.empty())
         {
-            std::cout
-                << "    none\n";
+            std::cout << "    none\n";
         }
         else
         {
             for (const auto& edge :
                  graph.edges)
             {
-                std::cout
-                    << "    ";
+                std::cout << "    ";
 
                 PrintAddress(
                     edge.sourceAddress);
@@ -552,8 +554,7 @@ void PrintDominators(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -573,22 +574,19 @@ void PrintDominators(
 
         if (routine.backEdges.empty())
         {
-            std::cout
-                << "    none\n";
+            std::cout << "    none\n";
         }
         else
         {
             for (const auto& edge :
                  routine.backEdges)
             {
-                std::cout
-                    << "    ";
+                std::cout << "    ";
 
                 PrintAddress(
                     edge.sourceAddress);
 
-                std::cout
-                    << " -> ";
+                std::cout << " -> ";
 
                 PrintAddress(
                     edge.targetAddress);
@@ -669,8 +667,7 @@ void PrintPostDominators(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -681,6 +678,90 @@ void PrintPostDominators(
 
             PrintAddressList(
                 node.postDominators);
+
+            std::cout << '\n';
+        }
+    }
+}
+
+void PrintConditionalRegions(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Conditional Regions\n"
+        << "=====================================\n";
+
+    for (const auto& routine :
+         analysis.conditionals.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.routineName
+            << "  ";
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  regions="
+            << routine.regions.size()
+            << " if="
+            << routine.IfThenCount()
+            << " if-else="
+            << routine.IfElseCount()
+            << '\n';
+
+        if (routine.regions.empty())
+        {
+            std::cout
+                << "  none\n";
+
+            continue;
+        }
+
+        for (const auto& region :
+             routine.regions)
+        {
+            std::cout
+                << "  "
+                << ConditionalRegionKindToString(
+                    region.kind)
+                << " header=";
+
+            PrintAddress(
+                region.headerAddress);
+
+            std::cout
+                << " join=";
+
+            PrintAddress(
+                region.joinAddress);
+
+            std::cout
+                << "\n    branch target: ";
+
+            PrintAddress(
+                region.branchTargetAddress);
+
+            std::cout
+                << "\n    fall target:   ";
+
+            PrintAddress(
+                region.fallthroughTargetAddress);
+
+            std::cout
+                << "\n    branch blocks: ";
+
+            PrintAddressList(
+                region.branchBlocks);
+
+            std::cout
+                << "\n    fall blocks:   ";
+
+            PrintAddressList(
+                region.fallthroughBlocks);
 
             std::cout << '\n';
         }
@@ -740,8 +821,7 @@ void PrintNaturalLoops(
 
             if (loop.IsSelfLoop())
             {
-                std::cout
-                    << " [self]";
+                std::cout << " [self]";
             }
 
             std::cout
@@ -761,8 +841,7 @@ void PrintNaturalLoops(
 
             if (loop.exits.empty())
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
             else
             {
@@ -772,8 +851,7 @@ void PrintNaturalLoops(
                 {
                     if (i != 0)
                     {
-                        std::cout
-                            << ", ";
+                        std::cout << ", ";
                     }
 
                     const auto& exit =
@@ -851,8 +929,7 @@ void PrintLoopNesting(
 
             if (node.selfLoop)
             {
-                std::cout
-                    << " [self]";
+                std::cout << " [self]";
             }
 
             std::cout
@@ -865,8 +942,7 @@ void PrintLoopNesting(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -1110,8 +1186,7 @@ int main(
         PrintAddress(
             segment.begin);
 
-        std::cout
-            << " - ";
+        std::cout << " - ";
 
         PrintAddress(
             segment.end);
@@ -1266,6 +1341,15 @@ int main(
         << "  Post-dominator exits:     "
         << analysis.PostDominatorTerminalCount()
         << '\n'
+        << "  Conditional regions:      "
+        << analysis.ConditionalRegionCount()
+        << '\n'
+        << "  If regions:               "
+        << analysis.IfThenCount()
+        << '\n'
+        << "  If-else regions:          "
+        << analysis.IfElseCount()
+        << '\n'
         << "  Natural loops:            "
         << analysis.NaturalLoopCount()
         << '\n'
@@ -1301,6 +1385,9 @@ int main(
         analysis);
 
     PrintPostDominators(
+        analysis);
+
+    PrintConditionalRegions(
         analysis);
 
     PrintNaturalLoops(

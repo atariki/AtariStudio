@@ -9,6 +9,7 @@
 #include <AtariStudio/Disassembler/BasicBlockAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
+#include <AtariStudio/Disassembler/ConditionalRegionAnalyzer.h>
 #include <AtariStudio/Disassembler/ControlFlowAnalyzer.h>
 #include <AtariStudio/Disassembler/ControlFlowGraph.h>
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
@@ -24,59 +25,28 @@ namespace atari
 
 struct AnalysisEngineResult
 {
-    //
-    // Control flow + relocation.
-    //
     ControlFlowAnalysisResult controlFlow;
 
-    //
-    // Symbols / XREF / relocation metadata.
-    //
     DisassemblyMetadata metadata;
 
-    //
-    // CODE / DATA regions.
-    //
     std::vector<CodeDataRegion> regions;
 
-    //
-    // Routines.
-    //
     RoutineAnalysisResult routines;
 
-    //
-    // Basic blocks.
-    //
     BasicBlockAnalysisResult basicBlocks;
 
-    //
-    // Per-routine CFG.
-    //
     ControlFlowGraphAnalysisResult graphs;
 
-    //
-    // Dominators + back edges.
-    //
     DominatorAnalysisResult dominators;
 
-    //
-    // Post-dominators.
-    //
     PostDominatorAnalysisResult postDominators;
 
-    //
-    // Natural loops.
-    //
+    ConditionalRegionAnalysisResult conditionals;
+
     NaturalLoopAnalysisResult loops;
 
-    //
-    // Loop nesting tree.
-    //
     LoopNestingAnalysisResult loopNesting;
 
-    //
-    // Final disassembly listing.
-    //
     DisassemblyListing listing;
 
     std::size_t cfgInstructionCount = 0;
@@ -163,6 +133,27 @@ struct AnalysisEngineResult
     }
 
     [[nodiscard]]
+    std::size_t ConditionalRegionCount() const noexcept
+    {
+        return
+            conditionals.RegionCount();
+    }
+
+    [[nodiscard]]
+    std::size_t IfThenCount() const noexcept
+    {
+        return
+            conditionals.IfThenCount();
+    }
+
+    [[nodiscard]]
+    std::size_t IfElseCount() const noexcept
+    {
+        return
+            conditionals.IfElseCount();
+    }
+
+    [[nodiscard]]
     std::size_t NaturalLoopCount() const noexcept
     {
         return
@@ -235,10 +226,8 @@ public:
         }
 
         //
-        // =================================================
         // Phase 1:
         // Control flow + relocation.
-        // =================================================
         //
         ControlFlowAnalyzer
             controlFlowAnalyzer;
@@ -253,10 +242,8 @@ public:
                 instructionAddresses.size();
 
         //
-        // =================================================
         // Phase 2:
         // Disconnected code islands.
-        // =================================================
         //
         CodeIslandAnalyzer
             codeIslandAnalyzer;
@@ -271,20 +258,16 @@ public:
             result.cfgInstructionCount;
 
         //
-        // =================================================
         // Phase 3:
         // Symbols + XREF.
-        // =================================================
         //
         result.metadata.Build(
             project,
             result.controlFlow);
 
         //
-        // =================================================
         // Phase 4:
         // CODE / DATA.
-        // =================================================
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -294,10 +277,8 @@ public:
                 project);
 
         //
-        // =================================================
         // Phase 5:
         // Routines.
-        // =================================================
         //
         RoutineAnalyzer
             routineAnalyzer;
@@ -310,10 +291,8 @@ public:
                 result.regions);
 
         //
-        // =================================================
         // Phase 6:
         // Basic blocks.
-        // =================================================
         //
         BasicBlockAnalyzer
             basicBlockAnalyzer;
@@ -325,10 +304,8 @@ public:
                 result.routines);
 
         //
-        // =================================================
         // Phase 7:
-        // CFG model.
-        // =================================================
+        // CFG.
         //
         ControlFlowGraphBuilder
             graphBuilder;
@@ -338,10 +315,8 @@ public:
                 result.basicBlocks);
 
         //
-        // =================================================
         // Phase 8:
-        // Dominators + back edges.
-        // =================================================
+        // Dominators.
         //
         DominatorAnalyzer
             dominatorAnalyzer;
@@ -351,13 +326,8 @@ public:
                 result.graphs);
 
         //
-        // =================================================
         // Phase 9:
         // Post-dominators.
-        //
-        // This implementation has an iteration guard and
-        // cannot loop forever.
-        // =================================================
         //
         PostDominatorAnalyzer
             postDominatorAnalyzer;
@@ -367,10 +337,20 @@ public:
                 result.graphs);
 
         //
-        // =================================================
         // Phase 10:
+        // Structured conditional regions.
+        //
+        ConditionalRegionAnalyzer
+            conditionalRegionAnalyzer;
+
+        result.conditionals =
+            conditionalRegionAnalyzer.Analyze(
+                result.graphs,
+                result.postDominators);
+
+        //
+        // Phase 11:
         // Natural loops.
-        // =================================================
         //
         NaturalLoopAnalyzer
             naturalLoopAnalyzer;
@@ -381,10 +361,8 @@ public:
                 result.dominators);
 
         //
-        // =================================================
-        // Phase 11:
+        // Phase 12:
         // Loop nesting.
-        // =================================================
         //
         LoopNestingAnalyzer
             loopNestingAnalyzer;
@@ -394,10 +372,8 @@ public:
                 result.loops);
 
         //
-        // =================================================
-        // Phase 12:
+        // Phase 13:
         // Listing.
-        // =================================================
         //
         result.listing.Build(
             project,
