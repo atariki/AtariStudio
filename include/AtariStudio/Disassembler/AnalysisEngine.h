@@ -20,6 +20,7 @@
 #include <AtariStudio/Disassembler/NaturalLoopAnalyzer.h>
 #include <AtariStudio/Disassembler/PostDominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
+#include <AtariStudio/Disassembler/StructuredControlFlowAnalyzer.h>
 
 namespace atari
 {
@@ -46,6 +47,8 @@ struct AnalysisEngineResult
 
     BranchConditionAnalysisResult branchConditions;
 
+    StructuredControlFlowAnalysisResult structuredControlFlow;
+
     NaturalLoopAnalysisResult loops;
 
     LoopNestingAnalysisResult loopNesting;
@@ -60,16 +63,14 @@ struct AnalysisEngineResult
     std::size_t TotalInstructionCount() const noexcept
     {
         return
-            controlFlow.
-                instructionAddresses.size();
+            controlFlow.instructionAddresses.size();
     }
 
     [[nodiscard]]
     std::size_t CrossReferenceCount() const noexcept
     {
         return
-            metadata.CrossReferences().
-                references.size();
+            metadata.CrossReferences().references.size();
     }
 
     [[nodiscard]]
@@ -161,6 +162,34 @@ struct AnalysisEngineResult
     {
         return
             branchConditions.ConditionCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredIfCount() const noexcept
+    {
+        return
+            structuredControlFlow.IfCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredIfElseCount() const noexcept
+    {
+        return
+            structuredControlFlow.IfElseCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredRootCount() const noexcept
+    {
+        return
+            structuredControlFlow.RootCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredMaximumDepth() const noexcept
+    {
+        return
+            structuredControlFlow.MaximumDepth();
     }
 
     [[nodiscard]]
@@ -360,7 +389,7 @@ public:
 
         //
         // Phase 11:
-        // 6502 branch-condition semantics.
+        // Branch conditions.
         //
         BranchConditionAnalyzer
             branchConditionAnalyzer;
@@ -373,6 +402,18 @@ public:
 
         //
         // Phase 12:
+        // Structured high-level IF reconstruction.
+        //
+        StructuredControlFlowAnalyzer
+            structuredControlFlowAnalyzer;
+
+        result.structuredControlFlow =
+            structuredControlFlowAnalyzer.Analyze(
+                result.conditionals,
+                result.branchConditions);
+
+        //
+        // Phase 13:
         // Natural loops.
         //
         NaturalLoopAnalyzer
@@ -384,7 +425,7 @@ public:
                 result.dominators);
 
         //
-        // Phase 13:
+        // Phase 14:
         // Loop nesting.
         //
         LoopNestingAnalyzer
@@ -395,7 +436,7 @@ public:
                 result.loops);
 
         //
-        // Phase 14:
+        // Phase 15:
         // Listing.
         //
         result.listing.Build(
