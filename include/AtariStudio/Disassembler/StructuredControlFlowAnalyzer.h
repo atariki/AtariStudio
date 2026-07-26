@@ -34,9 +34,12 @@ struct StructuredIf
     ProcessorFlag flag =
         ProcessorFlag::Zero;
 
+    // High-level condition controlling entry into THEN.
     FlagState thenState =
         FlagState::Set;
 
+    // True when the high-level IF condition is the opposite
+    // of the original branch-taken condition.
     bool branchConditionInverted = false;
 
     u16 thenEntryAddress = 0;
@@ -88,8 +91,7 @@ struct RoutineStructuredControlFlowAnalysis
                         headerAddress;
                 });
 
-        if (iterator ==
-            ifStatements.end())
+        if (iterator == ifStatements.end())
         {
             return nullptr;
         }
@@ -113,8 +115,7 @@ struct RoutineStructuredControlFlowAnalysis
                         headerAddress;
                 });
 
-        if (iterator ==
-            ifStatements.end())
+        if (iterator == ifStatements.end())
         {
             return nullptr;
         }
@@ -189,8 +190,7 @@ struct StructuredControlFlowAnalysisResult
                         entryAddress;
                 });
 
-        if (iterator ==
-            routines.end())
+        if (iterator == routines.end())
         {
             return nullptr;
         }
@@ -369,6 +369,11 @@ private:
         result.flag =
             branch.flag;
 
+        //
+        // Proper IF / ELSE:
+        //
+        // both arms contain real blocks.
+        //
         if (region.kind ==
             ConditionalRegionKind::IfElse)
         {
@@ -399,6 +404,12 @@ private:
             return true;
         }
 
+        //
+        // Simple IF:
+        //
+        // one CFG arm goes directly to JOIN,
+        // while the other arm contains the body.
+        //
         const bool branchArmEmpty =
             region.branchTargetAddress ==
                 region.joinAddress ||
@@ -409,6 +420,10 @@ private:
                 region.joinAddress ||
             region.fallthroughBlocks.empty();
 
+        //
+        // For a valid simple IF exactly one arm
+        // must represent an empty body.
+        //
         if (branchArmEmpty ==
             fallthroughArmEmpty)
         {
@@ -418,10 +433,20 @@ private:
         if (branchArmEmpty)
         {
             //
-            // Conditional branch jumps over the body.
+            // Example:
             //
-            // Therefore the high-level IF executes on
-            // the opposite, fall-through condition.
+            //     BNE JOIN
+            //     BODY
+            // JOIN:
+            //
+            // BNE executes when Z == 0 and skips BODY.
+            //
+            // Therefore BODY executes when:
+            //
+            //     Z == 1
+            //
+            // Thus the high-level IF condition is the
+            // fall-through condition.
             //
             result.thenState =
                 branch.fallthroughState;
@@ -434,9 +459,15 @@ private:
 
             result.thenBlocks =
                 region.fallthroughBlocks;
+
+            result.elseEntryAddress.reset();
+            result.elseBlocks.clear();
         }
         else
         {
+            //
+            // Conditional branch enters the IF body.
+            //
             result.thenState =
                 branch.branchTakenState;
 
@@ -448,6 +479,9 @@ private:
 
             result.thenBlocks =
                 region.branchBlocks;
+
+            result.elseEntryAddress.reset();
+            result.elseBlocks.clear();
         }
 
         return
@@ -457,6 +491,9 @@ private:
     static void BuildNesting(
         RoutineStructuredControlFlowAnalysis& routine)
     {
+        //
+        // Reset nesting information first.
+        //
         for (auto& statement :
              routine.ifStatements)
         {
@@ -471,7 +508,10 @@ private:
         }
 
         //
-        // Find smallest enclosing structured arm.
+        // For each IF find the smallest other IF arm
+        // which contains its header.
+        //
+        // That enclosing IF becomes the direct parent.
         //
         for (auto& child :
              routine.ifStatements)
@@ -487,6 +527,9 @@ private:
             for (const auto& candidate :
                  routine.ifStatements)
             {
+                //
+                // An IF cannot contain itself.
+                //
                 if (candidate.headerAddress ==
                     child.headerAddress)
                 {
@@ -525,6 +568,9 @@ private:
                     continue;
                 }
 
+                //
+                // Choose the smallest enclosing arm.
+                //
                 if (bestParent == nullptr ||
                     containingSize < bestSize ||
                     (containingSize == bestSize &&
@@ -553,7 +599,7 @@ private:
         }
 
         //
-        // Build child lists.
+        // Build reverse parent -> children lists.
         //
         for (const auto& child :
              routine.ifStatements)
@@ -576,6 +622,9 @@ private:
                 child.headerAddress);
         }
 
+        //
+        // Keep children deterministic.
+        //
         for (auto& statement :
              routine.ifStatements)
         {
@@ -606,6 +655,9 @@ private:
         std::optional<u16> parent =
             statement.parentHeaderAddress;
 
+        //
+        // Guard protects us from malformed parent cycles.
+        //
         std::size_t guard = 0;
 
         while (parent.has_value() &&

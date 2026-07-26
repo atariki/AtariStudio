@@ -10,6 +10,7 @@
 #include <AtariStudio/Core/Project.h>
 #include <AtariStudio/Core/ProjectStatistics.h>
 #include <AtariStudio/Disassembler/AnalysisEngine.h>
+#include <AtariStudio/Disassembler/Disassembler.h>
 #include <AtariStudio/Formats/XEX/XexLoader.h>
 
 namespace
@@ -156,6 +157,22 @@ const char* FlagStateOperator(
     }
 }
 
+const char* FlagStateToString(
+    atari::FlagState state)
+{
+    switch (state)
+    {
+    case atari::FlagState::Clear:
+        return "clear";
+
+    case atari::FlagState::Set:
+        return "set";
+
+    default:
+        return "?";
+    }
+}
+
 const char* BranchMnemonic(
     atari::cpu6502::Instruction instruction)
 {
@@ -203,6 +220,69 @@ const char* StructuredArmToString(
 
     case atari::StructuredArm::Else:
         return "else";
+
+    default:
+        return "?";
+    }
+}
+
+// ============================================================
+// Flag producer helpers
+// ============================================================
+
+const char* FlagProducerKindToString(
+    atari::FlagProducerKind kind)
+{
+    switch (kind)
+    {
+    case atari::FlagProducerKind::ValueResult:
+        return "value-result";
+
+    case atari::FlagProducerKind::Compare:
+        return "compare";
+
+    case atari::FlagProducerKind::BitTest:
+        return "bit-test";
+
+    case atari::FlagProducerKind::ExplicitClear:
+        return "explicit-clear";
+
+    case atari::FlagProducerKind::ExplicitSet:
+        return "explicit-set";
+
+    case atari::FlagProducerKind::StatusRestore:
+        return "status-restore";
+
+    case atari::FlagProducerKind::Unknown:
+        return "unknown";
+
+    default:
+        return "?";
+    }
+}
+
+const char* FlagProducerStopReasonToString(
+    atari::FlagProducerStopReason reason)
+{
+    switch (reason)
+    {
+    case atari::FlagProducerStopReason::None:
+        return "none";
+
+    case atari::FlagProducerStopReason::EntryBoundary:
+        return "entry-boundary";
+
+    case atari::FlagProducerStopReason::AmbiguousPredecessors:
+        return "ambiguous-predecessors";
+
+    case atari::FlagProducerStopReason::CallBarrier:
+        return "call-barrier";
+
+    case atari::FlagProducerStopReason::Cycle:
+        return "cycle";
+
+    case atari::FlagProducerStopReason::MissingBlock:
+        return "missing-block";
 
     default:
         return "?";
@@ -293,9 +373,7 @@ void PrintAddressList(
 {
     if (addresses.empty())
     {
-        std::cout
-            << "none";
-
+        std::cout << "none";
         return;
     }
 
@@ -305,8 +383,7 @@ void PrintAddressList(
     {
         if (i != 0)
         {
-            std::cout
-                << ", ";
+            std::cout << ", ";
         }
 
         PrintAddress(
@@ -329,9 +406,7 @@ void PrintRelocationMap(
 
     if (relocation.ranges.empty())
     {
-        std::cout
-            << "  none\n";
-
+        std::cout << "  none\n";
         return;
     }
 
@@ -348,27 +423,23 @@ void PrintRelocationMap(
                 range.destinationBegin) +
             range.size - 1;
 
-        std::cout
-            << "  ";
+        std::cout << "  ";
 
         PrintAddress(
             range.sourceBegin);
 
-        std::cout
-            << " - ";
+        std::cout << " - ";
 
         PrintAddress(
             static_cast<atari::u16>(
                 sourceEnd));
 
-        std::cout
-            << "  ->  ";
+        std::cout << "  ->  ";
 
         PrintAddress(
             range.destinationBegin);
 
-        std::cout
-            << " - ";
+        std::cout << " - ";
 
         PrintAddress(
             static_cast<atari::u16>(
@@ -413,8 +484,7 @@ void PrintRoutines(
         PrintAddress(
             routine.entryAddress);
 
-        std::cout
-            << " - ";
+        std::cout << " - ";
 
         PrintAddress(
             routine.endAddress);
@@ -427,8 +497,7 @@ void PrintRoutines(
 
         if (routine.projectEntryPoint)
         {
-            std::cout
-                << "  [ENTRY]";
+            std::cout << "  [ENTRY]";
         }
 
         std::cout
@@ -448,8 +517,7 @@ void PrintRoutines(
 
         if (routine.callees.empty())
         {
-            std::cout
-                << "none";
+            std::cout << "none";
         }
         else
         {
@@ -459,8 +527,7 @@ void PrintRoutines(
             {
                 if (i != 0)
                 {
-                    std::cout
-                        << ", ";
+                    std::cout << ", ";
                 }
 
                 const auto& callee =
@@ -469,13 +536,11 @@ void PrintRoutines(
                 if (callee.type ==
                     atari::RoutineCalleeType::TailJump)
                 {
-                    std::cout
-                        << "JMP ";
+                    std::cout << "JMP ";
                 }
                 else
                 {
-                    std::cout
-                        << "JSR ";
+                    std::cout << "JSR ";
                 }
 
                 PrintAddress(
@@ -489,14 +554,12 @@ void PrintRoutines(
                     PrintAddress(
                         callee.encodedTarget);
 
-                    std::cout
-                        << ']';
+                    std::cout << ']';
                 }
             }
         }
 
-        std::cout
-            << '\n';
+        std::cout << '\n';
     }
 }
 
@@ -532,14 +595,12 @@ void PrintBasicBlocks(
         for (const auto& block :
              routine.blocks)
         {
-            std::cout
-                << "  ";
+            std::cout << "  ";
 
             PrintAddress(
                 block.beginAddress);
 
-            std::cout
-                << " - ";
+            std::cout << " - ";
 
             PrintAddress(
                 block.endAddress);
@@ -552,8 +613,7 @@ void PrintBasicBlocks(
 
             if (block.terminal)
             {
-                std::cout
-                    << "  [terminal]";
+                std::cout << "  [terminal]";
             }
 
             std::cout
@@ -561,8 +621,7 @@ void PrintBasicBlocks(
 
             if (block.successors.empty())
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
             else
             {
@@ -572,8 +631,7 @@ void PrintBasicBlocks(
                 {
                     if (i != 0)
                     {
-                        std::cout
-                            << ", ";
+                        std::cout << ", ";
                     }
 
                     const auto& edge =
@@ -589,8 +647,7 @@ void PrintBasicBlocks(
                 }
             }
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
     }
 }
@@ -629,28 +686,24 @@ void PrintControlFlowGraphs(
         for (const auto& node :
              graph.nodes)
         {
-            std::cout
-                << "  NODE ";
+            std::cout << "  NODE ";
 
             PrintAddress(
                 node.address);
 
-            std::cout
-                << " - ";
+            std::cout << " - ";
 
             PrintAddress(
                 node.endAddress);
 
             if (node.entry)
             {
-                std::cout
-                    << " [entry]";
+                std::cout << " [entry]";
             }
 
             if (node.terminal)
             {
-                std::cout
-                    << " [terminal]";
+                std::cout << " [terminal]";
             }
 
             std::cout
@@ -665,8 +718,7 @@ void PrintControlFlowGraphs(
             PrintAddressList(
                 node.successors);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
 
         std::cout
@@ -682,8 +734,7 @@ void PrintControlFlowGraphs(
             for (const auto& edge :
                  graph.edges)
             {
-                std::cout
-                    << "    ";
+                std::cout << "    ";
 
                 PrintAddress(
                     edge.sourceAddress);
@@ -697,7 +748,138 @@ void PrintControlFlowGraphs(
                 PrintAddress(
                     edge.targetAddress);
 
+                std::cout << '\n';
+            }
+        }
+    }
+}
+
+// ============================================================
+// Flag Producers
+// ============================================================
+
+void PrintFlagProducers(
+    const atari::Project& project,
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Flag Producers\n"
+        << "=====================================\n";
+
+    atari::Disassembler disassembler;
+
+    for (const auto& routine :
+         analysis.flagProducers.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.routineName
+            << "  ";
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  branches="
+            << routine.producers.size()
+            << " found="
+            << routine.FoundCount()
+            << " unresolved="
+            << routine.UnresolvedCount()
+            << '\n';
+
+        if (routine.producers.empty())
+        {
+            std::cout
+                << "  none\n";
+
+            continue;
+        }
+
+        for (const auto& producer :
+             routine.producers)
+        {
+            std::cout
+                << "\n  BRANCH ";
+
+            PrintAddress(
+                producer.branchAddress);
+
+            std::cout
+                << ' '
+                << BranchMnemonic(
+                    producer.branchInstruction)
+                << "  flag="
+                << ProcessorFlagToString(
+                    producer.flag)
+                << '\n';
+
+            if (!producer.found)
+            {
                 std::cout
+                    << "    producer: unresolved\n"
+                    << "    reason:   "
+                    << FlagProducerStopReasonToString(
+                        producer.stopReason)
+                    << '\n'
+                    << "    scanned:  "
+                    << std::dec
+                    << producer.instructionsBack
+                    << " instructions, "
+                    << producer.blocksBack
+                    << " predecessor blocks\n";
+
+                continue;
+            }
+
+            const auto decodedProducer =
+                disassembler.Decode(
+                    project.GetMemory(),
+                    producer.producerAddress);
+
+            std::cout
+                << "    producer: ";
+
+            PrintAddress(
+                producer.producerAddress);
+
+            std::cout
+                << ' '
+                << decodedProducer.text
+                << '\n';
+
+            std::cout
+                << "    kind:     "
+                << FlagProducerKindToString(
+                    producer.kind)
+                << '\n';
+
+            std::cout
+                << "    location: "
+                << (producer.IsLocal()
+                        ? "same block"
+                        : "predecessor block")
+                << '\n';
+
+            std::cout
+                << "    distance: "
+                << std::dec
+                << producer.instructionsBack
+                << " instructions, "
+                << producer.blocksBack
+                << " predecessor blocks\n";
+
+            if (producer.constantState.has_value())
+            {
+                std::cout
+                    << "    constant: "
+                    << ProcessorFlagToString(
+                        producer.flag)
+                    << " = "
+                    << FlagStateToString(
+                        producer.constantState.value())
                     << '\n';
             }
         }
@@ -723,8 +905,7 @@ void PrintDominators(
             analysis.graphs.FindRoutine(
                 routine.routineEntryAddress);
 
-        std::cout
-            << '\n';
+        std::cout << '\n';
 
         if (graph != nullptr)
         {
@@ -747,8 +928,7 @@ void PrintDominators(
         for (const auto& node :
              routine.nodes)
         {
-            std::cout
-                << "  NODE ";
+            std::cout << "  NODE ";
 
             PrintAddress(
                 node.address);
@@ -763,8 +943,7 @@ void PrintDominators(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -776,8 +955,7 @@ void PrintDominators(
             PrintAddressList(
                 node.dominators);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
 
         std::cout
@@ -793,14 +971,12 @@ void PrintDominators(
             for (const auto& edge :
                  routine.backEdges)
             {
-                std::cout
-                    << "    ";
+                std::cout << "    ";
 
                 PrintAddress(
                     edge.sourceAddress);
 
-                std::cout
-                    << " -> ";
+                std::cout << " -> ";
 
                 PrintAddress(
                     edge.targetAddress);
@@ -858,14 +1034,12 @@ void PrintPostDominators(
         PrintAddressList(
             routine.terminalAddresses);
 
-        std::cout
-            << '\n';
+        std::cout << '\n';
 
         for (const auto& node :
              routine.nodes)
         {
-            std::cout
-                << "  NODE ";
+            std::cout << "  NODE ";
 
             PrintAddress(
                 node.address);
@@ -886,8 +1060,7 @@ void PrintPostDominators(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -899,8 +1072,7 @@ void PrintPostDominators(
             PrintAddressList(
                 node.postDominators);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
     }
 }
@@ -940,9 +1112,7 @@ void PrintConditionalRegions(
 
         if (routine.regions.empty())
         {
-            std::cout
-                << "  none\n";
-
+            std::cout << "  none\n";
             continue;
         }
 
@@ -988,8 +1158,7 @@ void PrintConditionalRegions(
             PrintAddressList(
                 region.fallthroughBlocks);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
     }
 }
@@ -1025,9 +1194,7 @@ void PrintBranchConditions(
 
         if (routine.conditions.empty())
         {
-            std::cout
-                << "  none\n";
-
+            std::cout << "  none\n";
             continue;
         }
 
@@ -1064,8 +1231,7 @@ void PrintBranchConditions(
             PrintAddress(
                 condition.branchTargetAddress);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    fall-through: "
@@ -1079,8 +1245,7 @@ void PrintBranchConditions(
             PrintAddress(
                 condition.fallthroughTargetAddress);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    join: ";
@@ -1134,9 +1299,7 @@ void PrintStructuredControlFlow(
 
         if (routine.ifStatements.empty())
         {
-            std::cout
-                << "  none\n";
-
+            std::cout << "  none\n";
             continue;
         }
 
@@ -1156,17 +1319,14 @@ void PrintStructuredControlFlow(
 
             if (statement.HasElse())
             {
-                std::cout
-                    << " [if-else]";
+                std::cout << " [if-else]";
             }
             else
             {
-                std::cout
-                    << " [if]";
+                std::cout << " [if]";
             }
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    source: ";
@@ -1181,12 +1341,10 @@ void PrintStructuredControlFlow(
 
             if (statement.branchConditionInverted)
             {
-                std::cout
-                    << " [inverted]";
+                std::cout << " [inverted]";
             }
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    condition: "
@@ -1219,8 +1377,7 @@ void PrintStructuredControlFlow(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -1251,8 +1408,7 @@ void PrintStructuredControlFlow(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -1261,8 +1417,7 @@ void PrintStructuredControlFlow(
             PrintAddressList(
                 statement.childHeaders);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
     }
 }
@@ -1298,9 +1453,7 @@ void PrintNaturalLoops(
 
         if (routine.loops.empty())
         {
-            std::cout
-                << "  none\n";
-
+            std::cout << "  none\n";
             continue;
         }
 
@@ -1324,8 +1477,7 @@ void PrintNaturalLoops(
 
             if (loop.IsSelfLoop())
             {
-                std::cout
-                    << " [self]";
+                std::cout << " [self]";
             }
 
             std::cout
@@ -1345,8 +1497,7 @@ void PrintNaturalLoops(
 
             if (loop.exits.empty())
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
             else
             {
@@ -1356,8 +1507,7 @@ void PrintNaturalLoops(
                 {
                     if (i != 0)
                     {
-                        std::cout
-                            << ", ";
+                        std::cout << ", ";
                     }
 
                     const auto& exit =
@@ -1377,8 +1527,7 @@ void PrintNaturalLoops(
                 }
             }
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
     }
 }
@@ -1414,9 +1563,7 @@ void PrintLoopConditions(
 
         if (routine.conditions.empty())
         {
-            std::cout
-                << "  none\n";
-
+            std::cout << "  none\n";
             continue;
         }
 
@@ -1467,17 +1614,14 @@ void PrintLoopConditions(
 
             if (condition.branchTakenContinues)
             {
-                std::cout
-                    << "  [continue]";
+                std::cout << "  [continue]";
             }
             else
             {
-                std::cout
-                    << "  [exit]";
+                std::cout << "  [exit]";
             }
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    fall-through: "
@@ -1493,17 +1637,14 @@ void PrintLoopConditions(
 
             if (condition.branchTakenContinues)
             {
-                std::cout
-                    << "  [exit]";
+                std::cout << "  [exit]";
             }
             else
             {
-                std::cout
-                    << "  [continue]";
+                std::cout << "  [continue]";
             }
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    continue condition: "
@@ -1517,8 +1658,7 @@ void PrintLoopConditions(
             PrintAddress(
                 condition.continueTargetAddress);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    exit condition:     "
@@ -1532,8 +1672,7 @@ void PrintLoopConditions(
             PrintAddress(
                 condition.exitTargetAddress);
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
         }
     }
 }
@@ -1573,9 +1712,7 @@ void PrintLoopNesting(
 
         if (routine.nodes.empty())
         {
-            std::cout
-                << "  none\n";
-
+            std::cout << "  none\n";
             continue;
         }
 
@@ -1595,8 +1732,7 @@ void PrintLoopNesting(
 
             if (node.selfLoop)
             {
-                std::cout
-                    << " [self]";
+                std::cout << " [self]";
             }
 
             std::cout
@@ -1609,8 +1745,7 @@ void PrintLoopNesting(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -1673,9 +1808,7 @@ void PrintStructuredLoops(
 
         if (routine.loops.empty())
         {
-            std::cout
-                << "  none\n";
-
+            std::cout << "  none\n";
             continue;
         }
 
@@ -1698,12 +1831,10 @@ void PrintStructuredLoops(
 
             if (loop.selfLoop)
             {
-                std::cout
-                    << "  [self]";
+                std::cout << "  [self]";
             }
 
-            std::cout
-                << '\n';
+            std::cout << '\n';
 
             std::cout
                 << "    parent: ";
@@ -1715,8 +1846,7 @@ void PrintStructuredLoops(
             }
             else
             {
-                std::cout
-                    << "none";
+                std::cout << "none";
             }
 
             std::cout
@@ -1743,12 +1873,7 @@ void PrintStructuredLoops(
             PrintAddressList(
                 loop.exitAddresses);
 
-            std::cout
-                << '\n';
-
-            // ------------------------------------------------
-            // Primary loop condition
-            // ------------------------------------------------
+            std::cout << '\n';
 
             if (loop.primaryCondition.has_value())
             {
@@ -1756,25 +1881,18 @@ void PrintStructuredLoops(
                     loop.primaryCondition.value();
 
                 std::cout
-                    << "    primary condition:\n";
-
-                std::cout
+                    << "    primary condition:\n"
                     << "      position: "
                     << LoopConditionPositionToString(
                         condition.position)
-                    << '\n';
-
-                std::cout
+                    << '\n'
                     << "      source:   ";
 
                 PrintAddress(
                     condition.sourceBlockAddress);
 
                 std::cout
-                    << '\n';
-
-                std::cout
-                    << "      branch:   ";
+                    << "\n      branch:   ";
 
                 PrintAddress(
                     condition.instructionAddress);
@@ -1783,9 +1901,7 @@ void PrintStructuredLoops(
                     << ' '
                     << BranchMnemonic(
                         condition.instruction)
-                    << '\n';
-
-                std::cout
+                    << '\n'
                     << "      continue: "
                     << ProcessorFlagToString(
                         condition.flag)
@@ -1798,10 +1914,7 @@ void PrintStructuredLoops(
                     condition.continueTargetAddress);
 
                 std::cout
-                    << '\n';
-
-                std::cout
-                    << "      exit:     "
+                    << "\n      exit:     "
                     << ProcessorFlagToString(
                         condition.flag)
                     << ' '
@@ -1812,18 +1925,13 @@ void PrintStructuredLoops(
                 PrintAddress(
                     condition.exitTargetAddress);
 
-                std::cout
-                    << '\n';
+                std::cout << '\n';
             }
             else
             {
                 std::cout
                     << "    primary condition: none\n";
             }
-
-            // ------------------------------------------------
-            // Header conditions
-            // ------------------------------------------------
 
             std::cout
                 << "    header conditions: "
@@ -1834,8 +1942,7 @@ void PrintStructuredLoops(
             for (const auto& condition :
                  loop.headerConditions)
             {
-                std::cout
-                    << "      ";
+                std::cout << "      ";
 
                 PrintAddress(
                     condition.instructionAddress);
@@ -1855,13 +1962,8 @@ void PrintStructuredLoops(
                 PrintAddress(
                     condition.exitTargetAddress);
 
-                std::cout
-                    << '\n';
+                std::cout << '\n';
             }
-
-            // ------------------------------------------------
-            // Latch conditions
-            // ------------------------------------------------
 
             std::cout
                 << "    latch conditions: "
@@ -1872,8 +1974,7 @@ void PrintStructuredLoops(
             for (const auto& condition :
                  loop.latchConditions)
             {
-                std::cout
-                    << "      ";
+                std::cout << "      ";
 
                 PrintAddress(
                     condition.instructionAddress);
@@ -1893,13 +1994,8 @@ void PrintStructuredLoops(
                 PrintAddress(
                     condition.exitTargetAddress);
 
-                std::cout
-                    << '\n';
+                std::cout << '\n';
             }
-
-            // ------------------------------------------------
-            // Body / break-like conditions
-            // ------------------------------------------------
 
             std::cout
                 << "    body conditions: "
@@ -1920,9 +2016,7 @@ void PrintStructuredLoops(
                     << ' '
                     << BranchMnemonic(
                         condition.instruction)
-                    << '\n';
-
-                std::cout
+                    << '\n'
                     << "        continue when "
                     << ProcessorFlagToString(
                         condition.flag)
@@ -1935,10 +2029,7 @@ void PrintStructuredLoops(
                     condition.continueTargetAddress);
 
                 std::cout
-                    << '\n';
-
-                std::cout
-                    << "        break when    "
+                    << "\n        break when    "
                     << ProcessorFlagToString(
                         condition.flag)
                     << ' '
@@ -1949,13 +2040,8 @@ void PrintStructuredLoops(
                 PrintAddress(
                     condition.exitTargetAddress);
 
-                std::cout
-                    << '\n';
+                std::cout << '\n';
             }
-
-            // ------------------------------------------------
-            // Pseudo representation
-            // ------------------------------------------------
 
             std::cout
                 << "    reconstructed:\n";
@@ -1977,14 +2063,6 @@ void PrintStructuredLoops(
                         << FlagStateOperator(
                             condition.continueState)
                         << ")\n"
-                        << "      {\n"
-                        << "          ...\n"
-                        << "      }\n";
-                }
-                else
-                {
-                    std::cout
-                        << "      while (...)\n"
                         << "      {\n"
                         << "          ...\n"
                         << "      }\n";
@@ -2014,11 +2092,6 @@ void PrintStructuredLoops(
                             condition.continueState)
                         << ");\n";
                 }
-                else
-                {
-                    std::cout
-                        << "      while (...);\n";
-                }
 
                 break;
 
@@ -2028,25 +2101,23 @@ void PrintStructuredLoops(
                     << "      for (;;)\n"
                     << "      {\n";
 
-                if (!loop.bodyConditions.empty())
+                for (const auto& condition :
+                     loop.bodyConditions)
                 {
-                    for (const auto& condition :
-                         loop.bodyConditions)
-                    {
-                        std::cout
-                            << "          if ("
-                            << ProcessorFlagToString(
-                                condition.flag)
-                            << ' '
-                            << FlagStateOperator(
-                                condition.exitState)
-                            << ")\n"
-                            << "          {\n"
-                            << "              break;\n"
-                            << "          }\n";
-                    }
+                    std::cout
+                        << "          if ("
+                        << ProcessorFlagToString(
+                            condition.flag)
+                        << ' '
+                        << FlagStateOperator(
+                            condition.exitState)
+                        << ")\n"
+                        << "          {\n"
+                        << "              break;\n"
+                        << "          }\n";
                 }
-                else
+
+                if (loop.bodyConditions.empty())
                 {
                     std::cout
                         << "          ...\n";
@@ -2062,33 +2133,16 @@ void PrintStructuredLoops(
                 std::cout
                     << "      /* complex loop */\n"
                     << "      for (;;)\n"
-                    << "      {\n";
-
-                if (!loop.headerConditions.empty())
-                {
-                    std::cout
-                        << "          /* header conditions: "
-                        << loop.headerConditions.size()
-                        << " */\n";
-                }
-
-                if (!loop.bodyConditions.empty())
-                {
-                    std::cout
-                        << "          /* body exit conditions: "
-                        << loop.bodyConditions.size()
-                        << " */\n";
-                }
-
-                if (!loop.latchConditions.empty())
-                {
-                    std::cout
-                        << "          /* latch conditions: "
-                        << loop.latchConditions.size()
-                        << " */\n";
-                }
-
-                std::cout
+                    << "      {\n"
+                    << "          /* header conditions: "
+                    << loop.headerConditions.size()
+                    << " */\n"
+                    << "          /* body exit conditions: "
+                    << loop.bodyConditions.size()
+                    << " */\n"
+                    << "          /* latch conditions: "
+                    << loop.latchConditions.size()
+                    << " */\n"
                     << "      }\n";
 
                 break;
@@ -2120,8 +2174,7 @@ void PrintCodeRow(
     PrintAddress(
         row.address);
 
-    std::cout
-        << "  ";
+    std::cout << "  ";
 
     for (const atari::u8 value :
          row.bytes)
@@ -2142,8 +2195,7 @@ void PrintCodeRow(
          i < 3;
          ++i)
     {
-        std::cout
-            << "   ";
+        std::cout << "   ";
     }
 
     std::cout
@@ -2160,8 +2212,7 @@ void PrintCodeRow(
             << row.comment;
     }
 
-    std::cout
-        << '\n';
+    std::cout << '\n';
 }
 
 void PrintDataRow(
@@ -2176,8 +2227,7 @@ void PrintDataRow(
     PrintAddress(
         row.address);
 
-    std::cout
-        << "  ";
+    std::cout << "  ";
 
     for (const atari::u8 value :
          row.bytes)
@@ -2193,8 +2243,7 @@ void PrintDataRow(
             << ' ';
     }
 
-    std::cout
-        << '\n';
+    std::cout << '\n';
 }
 
 void PrintListing(
@@ -2203,17 +2252,14 @@ void PrintListing(
     std::cout
         << "\n=====================================\n"
         << " Code / Data Listing\n"
-        << "=====================================\n\n";
-
-    std::cout
+        << "=====================================\n\n"
         << "LABEL       ADDRESS  BYTES       INSTRUCTION\n"
         << "---------------------------------------------------------------------\n";
 
     for (const auto& region :
          analysis.listing.Regions())
     {
-        std::cout
-            << '\n';
+        std::cout << '\n';
 
         if (region.IsCode())
         {
@@ -2238,8 +2284,7 @@ void PrintListing(
                 << " ("
                 << std::dec
                 << region.Size()
-                << " bytes)"
-                << '\n';
+                << " bytes)\n";
         }
 
         for (const auto& row :
@@ -2344,8 +2389,7 @@ int main(
         PrintAddress(
             segment.begin);
 
-        std::cout
-            << " - ";
+        std::cout << " - ";
 
         PrintAddress(
             segment.end);
@@ -2372,8 +2416,7 @@ int main(
                 << "  [OVERLAP]";
         }
 
-        std::cout
-            << '\n';
+        std::cout << '\n';
     }
 
     // ========================================================
@@ -2390,8 +2433,7 @@ int main(
     }
     else
     {
-        std::cout
-            << "not set";
+        std::cout << "not set";
     }
 
     std::cout
@@ -2404,12 +2446,10 @@ int main(
     }
     else
     {
-        std::cout
-            << "not set";
+        std::cout << "not set";
     }
 
-    std::cout
-        << '\n';
+    std::cout << '\n';
 
     // ========================================================
     // XEX statistics
@@ -2420,9 +2460,7 @@ int main(
             project);
 
     std::cout
-        << std::dec;
-
-    std::cout
+        << std::dec
         << "\nXEX Statistics:\n"
         << "  Segments:     "
         << statistics.segmentCount
@@ -2466,9 +2504,7 @@ int main(
     // ========================================================
 
     std::cout
-        << std::dec;
-
-    std::cout
+        << std::dec
         << "\nAnalysis:\n"
         << "  Entry points:             "
         << analysis.controlFlow.entryPoints.size()
@@ -2502,6 +2538,16 @@ int main(
         << '\n'
         << "  CFG edges:                "
         << analysis.GraphEdgeCount()
+        << '\n'
+        << "  Flag branches:            "
+        << analysis.FlagProducerBranchCount()
+        << '\n'
+        << "  Flag producers found:     "
+        << analysis.FlagProducerFoundCount()
+        << '\n'
+        << "  Flag producers unresolved:"
+        << ' '
+        << analysis.FlagProducerUnresolvedCount()
         << '\n'
         << "  Dominator nodes:          "
         << analysis.DominatorNodeCount()
@@ -2596,6 +2642,10 @@ int main(
         analysis);
 
     PrintControlFlowGraphs(
+        analysis);
+
+    PrintFlagProducers(
+        project,
         analysis);
 
     PrintDominators(

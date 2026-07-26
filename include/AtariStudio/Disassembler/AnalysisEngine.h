@@ -16,6 +16,7 @@
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
 #include <AtariStudio/Disassembler/DominatorAnalyzer.h>
+#include <AtariStudio/Disassembler/FlagProducerAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopConditionAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopNestingAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopStructureAnalyzer.h>
@@ -23,6 +24,7 @@
 #include <AtariStudio/Disassembler/PostDominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
 #include <AtariStudio/Disassembler/StructuredControlFlowAnalyzer.h>
+#include <AtariStudio/Disassembler/SemanticConditionAnalyzer.h>
 
 namespace atari
 {
@@ -47,6 +49,42 @@ struct AnalysisEngineResult
 
     ControlFlowGraphAnalysisResult graphs;
 
+
+    //
+    // ========================================================
+    // Flag producer analysis
+    // ========================================================
+    //
+
+    FlagProducerAnalysisResult flagProducers;
+
+
+    //
+    // ========================================================
+    // Semantic condition analysis
+    // ========================================================
+    //
+    // Converts processor flags into high-level expressions:
+    //
+    //     INX
+    //     BNE label
+    //
+    // becomes:
+    //
+    //     X != 0
+    //
+    //     CPY #$03
+    //     BNE label
+    //
+    // becomes:
+    //
+    //     Y != $03
+    //
+    //
+
+    SemanticConditionAnalysisResult semanticConditions;
+
+
     //
     // ========================================================
     // Dominator analysis
@@ -57,7 +95,7 @@ struct AnalysisEngineResult
 
     PostDominatorAnalysisResult postDominators;
 
-    //
+        //
     // ========================================================
     // Conditional reconstruction
     // ========================================================
@@ -68,6 +106,7 @@ struct AnalysisEngineResult
     BranchConditionAnalysisResult branchConditions;
 
     StructuredControlFlowAnalysisResult structuredControlFlow;
+
 
     //
     // ========================================================
@@ -83,6 +122,7 @@ struct AnalysisEngineResult
 
     LoopStructureAnalysisResult loopStructures;
 
+
     //
     // ========================================================
     // Final listing
@@ -90,6 +130,7 @@ struct AnalysisEngineResult
     //
 
     DisassemblyListing listing;
+
 
     //
     // ========================================================
@@ -101,9 +142,12 @@ struct AnalysisEngineResult
 
     std::size_t codeIslandInstructionCount = 0;
 
+
+    //
     // --------------------------------------------------------
     // Instructions
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t TotalInstructionCount() const noexcept
@@ -114,9 +158,12 @@ struct AnalysisEngineResult
                 .size();
     }
 
+
+    //
     // --------------------------------------------------------
     // Metadata
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t CrossReferenceCount() const noexcept
@@ -128,6 +175,7 @@ struct AnalysisEngineResult
                 .size();
     }
 
+
     [[nodiscard]]
     std::size_t SymbolCount() const noexcept
     {
@@ -137,9 +185,12 @@ struct AnalysisEngineResult
                 .Size();
     }
 
+
+    //
     // --------------------------------------------------------
     // Routines
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t RoutineCount() const noexcept
@@ -150,9 +201,12 @@ struct AnalysisEngineResult
                 .size();
     }
 
+
+    //
     // --------------------------------------------------------
     // Basic blocks
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t BasicBlockCount() const noexcept
@@ -162,9 +216,12 @@ struct AnalysisEngineResult
                 .BlockCount();
     }
 
+
+    //
     // --------------------------------------------------------
     // CFG
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t GraphNodeCount() const noexcept
@@ -174,6 +231,7 @@ struct AnalysisEngineResult
                 .NodeCount();
     }
 
+
     [[nodiscard]]
     std::size_t GraphEdgeCount() const noexcept
     {
@@ -182,9 +240,78 @@ struct AnalysisEngineResult
                 .EdgeCount();
     }
 
+
+    //
+    // --------------------------------------------------------
+    // Flag producers
+    // --------------------------------------------------------
+    //
+
+    [[nodiscard]]
+    std::size_t FlagProducerBranchCount() const noexcept
+    {
+        return
+            flagProducers
+                .BranchCount();
+    }
+
+
+    [[nodiscard]]
+    std::size_t FlagProducerFoundCount() const noexcept
+    {
+        return
+            flagProducers
+                .FoundCount();
+    }
+
+
+    [[nodiscard]]
+    std::size_t FlagProducerUnresolvedCount() const noexcept
+    {
+        return
+            flagProducers
+                .UnresolvedCount();
+    }
+
+
+    //
+    // --------------------------------------------------------
+    // Semantic conditions
+    // --------------------------------------------------------
+    //
+
+    [[nodiscard]]
+    std::size_t SemanticConditionCount() const noexcept
+    {
+        return
+            semanticConditions
+                .ConditionCount();
+    }
+
+
+    [[nodiscard]]
+    std::size_t SemanticConditionResolvedCount() const noexcept
+    {
+        return
+            semanticConditions
+                .ResolvedCount();
+    }
+
+
+    [[nodiscard]]
+    std::size_t SemanticConditionUnresolvedCount() const noexcept
+    {
+        return
+            semanticConditions
+                .UnresolvedCount();
+    }
+
+
+    //
     // --------------------------------------------------------
     // Dominators
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t DominatorNodeCount() const noexcept
@@ -194,6 +321,7 @@ struct AnalysisEngineResult
                 .NodeCount();
     }
 
+
     [[nodiscard]]
     std::size_t BackEdgeCount() const noexcept
     {
@@ -202,9 +330,12 @@ struct AnalysisEngineResult
                 .BackEdgeCount();
     }
 
+
+    //
     // --------------------------------------------------------
-    // Post-dominators
+    // Post dominators
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t PostDominatorNodeCount() const noexcept
@@ -214,6 +345,7 @@ struct AnalysisEngineResult
                 .NodeCount();
     }
 
+
     [[nodiscard]]
     std::size_t PostDominatorTerminalCount() const noexcept
     {
@@ -222,9 +354,11 @@ struct AnalysisEngineResult
                 .TerminalCount();
     }
 
+        //
     // --------------------------------------------------------
     // Conditional regions
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t ConditionalRegionCount() const noexcept
@@ -234,6 +368,7 @@ struct AnalysisEngineResult
                 .RegionCount();
     }
 
+
     [[nodiscard]]
     std::size_t IfThenCount() const noexcept
     {
@@ -241,6 +376,7 @@ struct AnalysisEngineResult
             conditionals
                 .IfThenCount();
     }
+
 
     [[nodiscard]]
     std::size_t IfElseCount() const noexcept
@@ -250,9 +386,12 @@ struct AnalysisEngineResult
                 .IfElseCount();
     }
 
+
+    //
     // --------------------------------------------------------
     // Branch conditions
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t BranchConditionCount() const noexcept
@@ -262,9 +401,12 @@ struct AnalysisEngineResult
                 .ConditionCount();
     }
 
+
+    //
     // --------------------------------------------------------
-    // Structured IFs
+    // Structured IF
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t StructuredIfCount() const noexcept
@@ -274,6 +416,7 @@ struct AnalysisEngineResult
                 .IfCount();
     }
 
+
     [[nodiscard]]
     std::size_t StructuredIfElseCount() const noexcept
     {
@@ -281,6 +424,7 @@ struct AnalysisEngineResult
             structuredControlFlow
                 .IfElseCount();
     }
+
 
     [[nodiscard]]
     std::size_t StructuredRootCount() const noexcept
@@ -290,6 +434,7 @@ struct AnalysisEngineResult
                 .RootCount();
     }
 
+
     [[nodiscard]]
     std::size_t StructuredMaximumDepth() const noexcept
     {
@@ -298,9 +443,12 @@ struct AnalysisEngineResult
                 .MaximumDepth();
     }
 
+
+    //
     // --------------------------------------------------------
     // Natural loops
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t NaturalLoopCount() const noexcept
@@ -310,6 +458,7 @@ struct AnalysisEngineResult
                 .LoopCount();
     }
 
+
     [[nodiscard]]
     std::size_t LoopExitCount() const noexcept
     {
@@ -318,9 +467,12 @@ struct AnalysisEngineResult
                 .ExitCount();
     }
 
+
+    //
     // --------------------------------------------------------
     // Loop conditions
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t LoopConditionCount() const noexcept
@@ -330,9 +482,12 @@ struct AnalysisEngineResult
                 .ConditionCount();
     }
 
+
+    //
     // --------------------------------------------------------
     // Loop nesting
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t LoopTreeNodeCount() const noexcept
@@ -342,6 +497,7 @@ struct AnalysisEngineResult
                 .NodeCount();
     }
 
+
     [[nodiscard]]
     std::size_t RootLoopCount() const noexcept
     {
@@ -349,6 +505,7 @@ struct AnalysisEngineResult
             loopNesting
                 .RootCount();
     }
+
 
     [[nodiscard]]
     std::size_t MaximumLoopDepth() const noexcept
@@ -358,9 +515,12 @@ struct AnalysisEngineResult
                 .MaximumDepth();
     }
 
+
+    //
     // --------------------------------------------------------
     // Structured loops
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t StructuredLoopCount() const noexcept
@@ -370,6 +530,7 @@ struct AnalysisEngineResult
                 .LoopCount();
     }
 
+
     [[nodiscard]]
     std::size_t StructuredWhileCount() const noexcept
     {
@@ -377,6 +538,7 @@ struct AnalysisEngineResult
             loopStructures
                 .WhileCount();
     }
+
 
     [[nodiscard]]
     std::size_t StructuredDoWhileCount() const noexcept
@@ -386,6 +548,7 @@ struct AnalysisEngineResult
                 .DoWhileCount();
     }
 
+
     [[nodiscard]]
     std::size_t StructuredInfiniteLoopCount() const noexcept
     {
@@ -393,6 +556,7 @@ struct AnalysisEngineResult
             loopStructures
                 .InfiniteCount();
     }
+
 
     [[nodiscard]]
     std::size_t StructuredComplexLoopCount() const noexcept
@@ -402,6 +566,7 @@ struct AnalysisEngineResult
                 .ComplexCount();
     }
 
+
     [[nodiscard]]
     std::size_t StructuredBreakConditionCount() const noexcept
     {
@@ -409,6 +574,7 @@ struct AnalysisEngineResult
             loopStructures
                 .BreakConditionCount();
     }
+
 
     [[nodiscard]]
     std::size_t StructuredLoopMaximumDepth() const noexcept
@@ -418,9 +584,12 @@ struct AnalysisEngineResult
                 .MaximumDepth();
     }
 
+
+    //
     // --------------------------------------------------------
     // Listing
     // --------------------------------------------------------
+    //
 
     [[nodiscard]]
     std::size_t ListingRowCount() const noexcept
@@ -431,6 +600,7 @@ struct AnalysisEngineResult
     }
 };
 
+
 class AnalysisEngine
 {
 public:
@@ -440,6 +610,7 @@ public:
         Project& project) const
     {
         AnalysisEngineResult result;
+
 
         //
         // =====================================================
@@ -452,13 +623,16 @@ public:
         ResetAnalysisState(
             project);
 
+
         std::vector<u16> entryPoints;
+
 
         if (project.RunAddress() != 0)
         {
             entryPoints.push_back(
                 project.RunAddress());
         }
+
 
         if (project.InitAddress() != 0 &&
             project.InitAddress() !=
@@ -467,6 +641,7 @@ public:
             entryPoints.push_back(
                 project.InitAddress());
         }
+
 
         //
         // =====================================================
@@ -479,15 +654,18 @@ public:
         ControlFlowAnalyzer
             controlFlowAnalyzer;
 
+
         result.controlFlow =
             controlFlowAnalyzer.Analyze(
                 project.GetMemory(),
                 entryPoints);
 
+
         result.cfgInstructionCount =
             result.controlFlow
                 .instructionAddresses
                 .size();
+
 
         //
         // =====================================================
@@ -500,300 +678,24 @@ public:
         CodeIslandAnalyzer
             codeIslandAnalyzer;
 
+
         codeIslandAnalyzer.Analyze(
             project,
             result.controlFlow);
 
+
         result.codeIslandInstructionCount =
             result.controlFlow
                 .instructionAddresses
-                .size() -
+                .size()
+            -
             result.cfgInstructionCount;
 
-        //
-        // =====================================================
-        // Phase 3
-        //
-        // Build symbols, XREFs and relocation metadata.
-        // =====================================================
-        //
 
-        result.metadata.Build(
-            project,
-            result.controlFlow);
+            SemanticConditionAnalyzer semanticConditionAnalyzer;
+result.semanticConditions =
+    semanticConditionAnalyzer.Analyze(
+        project,
+        result.flagProducers);
 
-        //
-        // =====================================================
-        // Phase 4
-        //
-        // CODE / DATA classification.
-        // =====================================================
-        //
-
-        CodeDataAnalyzer
-            codeDataAnalyzer;
-
-        result.regions =
-            codeDataAnalyzer.Analyze(
-                project);
-
-        //
-        // =====================================================
-        // Phase 5
-        //
-        // Routine detection.
-        // =====================================================
-        //
-
-        RoutineAnalyzer
-            routineAnalyzer;
-
-        result.routines =
-            routineAnalyzer.Analyze(
-                project,
-                result.controlFlow,
-                result.metadata,
-                result.regions);
-
-        //
-        // =====================================================
-        // Phase 6
-        //
-        // Basic-block analysis.
-        // =====================================================
-        //
-
-        BasicBlockAnalyzer
-            basicBlockAnalyzer;
-
-        result.basicBlocks =
-            basicBlockAnalyzer.Analyze(
-                project,
-                result.controlFlow,
-                result.routines);
-
-        //
-        // =====================================================
-        // Phase 7
-        //
-        // Build per-routine control-flow graphs.
-        // =====================================================
-        //
-
-        ControlFlowGraphBuilder
-            graphBuilder;
-
-        result.graphs =
-            graphBuilder.Build(
-                result.basicBlocks);
-
-        //
-        // =====================================================
-        // Phase 8
-        //
-        // Dominator analysis + back edges.
-        // =====================================================
-        //
-
-        DominatorAnalyzer
-            dominatorAnalyzer;
-
-        result.dominators =
-            dominatorAnalyzer.Analyze(
-                result.graphs);
-
-        //
-        // =====================================================
-        // Phase 9
-        //
-        // Post-dominator analysis.
-        // =====================================================
-        //
-
-        PostDominatorAnalyzer
-            postDominatorAnalyzer;
-
-        result.postDominators =
-            postDominatorAnalyzer.Analyze(
-                result.graphs);
-
-        //
-        // =====================================================
-        // Phase 10
-        //
-        // Detect structured conditional regions.
-        // =====================================================
-        //
-
-        ConditionalRegionAnalyzer
-            conditionalRegionAnalyzer;
-
-        result.conditionals =
-            conditionalRegionAnalyzer.Analyze(
-                result.graphs,
-                result.postDominators);
-
-        //
-        // =====================================================
-        // Phase 11
-        //
-        // Decode 6502 branch semantics for IF regions.
-        // =====================================================
-        //
-
-        BranchConditionAnalyzer
-            branchConditionAnalyzer;
-
-        result.branchConditions =
-            branchConditionAnalyzer.Analyze(
-                project,
-                result.graphs,
-                result.conditionals);
-
-        //
-        // =====================================================
-        // Phase 12
-        //
-        // Reconstruct high-level IF structures.
-        // =====================================================
-        //
-
-        StructuredControlFlowAnalyzer
-            structuredControlFlowAnalyzer;
-
-        result.structuredControlFlow =
-            structuredControlFlowAnalyzer.Analyze(
-                result.conditionals,
-                result.branchConditions);
-
-        //
-        // =====================================================
-        // Phase 13
-        //
-        // Natural-loop detection.
-        // =====================================================
-        //
-
-        NaturalLoopAnalyzer
-            naturalLoopAnalyzer;
-
-        result.loops =
-            naturalLoopAnalyzer.Analyze(
-                result.graphs,
-                result.dominators);
-
-        //
-        // =====================================================
-        // Phase 14
-        //
-        // Loop-condition analysis.
-        //
-        // Finds conditions that:
-        //
-        //   - remain inside the loop;
-        //   - leave the loop;
-        //   - occur in the header;
-        //   - occur in a latch;
-        //   - occur inside the body.
-        // =====================================================
-        //
-
-        LoopConditionAnalyzer
-            loopConditionAnalyzer;
-
-        result.loopConditions =
-            loopConditionAnalyzer.Analyze(
-                project,
-                result.graphs,
-                result.loops);
-
-        //
-        // =====================================================
-        // Phase 15
-        //
-        // Loop nesting hierarchy.
-        // =====================================================
-        //
-
-        LoopNestingAnalyzer
-            loopNestingAnalyzer;
-
-        result.loopNesting =
-            loopNestingAnalyzer.Analyze(
-                result.loops);
-
-        //
-        // =====================================================
-        // Phase 16
-        //
-        // High-level loop reconstruction.
-        //
-        // NaturalLoop
-        //      +
-        // LoopCondition
-        //      +
-        // LoopNesting
-        //
-        // becomes:
-        //
-        //     while (...)
-        //
-        //     do
-        //     {
-        //     }
-        //     while (...);
-        //
-        //     for (;;)
-        //
-        //     complex loop
-        //
-        // =====================================================
-        //
-
-        LoopStructureAnalyzer
-            loopStructureAnalyzer;
-
-        result.loopStructures =
-            loopStructureAnalyzer.Analyze(
-                result.loops,
-                result.loopConditions,
-                result.loopNesting);
-
-        //
-        // =====================================================
-        // Phase 17
-        //
-        // Final disassembly listing.
-        // =====================================================
-        //
-
-        result.listing.Build(
-            project,
-            result.controlFlow,
-            result.metadata,
-            result.regions);
-
-        return result;
-    }
-
-private:
-
-    static void ResetAnalysisState(
-        Project& project)
-    {
-        auto& memory =
-            project.GetMemory();
-
-        for (std::size_t address = 0;
-             address < MemorySize;
-             ++address)
-        {
-            memory.Cell(
-                static_cast<u16>(
-                    address))
-                .executable = false;
-        }
-    }
-};
-
-} // namespace atari
+        
