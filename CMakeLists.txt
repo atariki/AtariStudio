@@ -14,7 +14,6 @@ endif()
 add_library(AtariStudio STATIC
 
     src/Core/Memory.cpp
-    src/Core/BinaryReader.cpp
     src/Core/Project.cpp
 
     src/Cpu6502/OpcodeTable.cpp
@@ -24,7 +23,6 @@ add_library(AtariStudio STATIC
 
     src/Formats/XEX/XexFile.cpp
     src/Formats/XEX/XexLoader.cpp
-    src/Formats/XEX/XexSegment.cpp
 )
 
 target_include_directories(AtariStudio

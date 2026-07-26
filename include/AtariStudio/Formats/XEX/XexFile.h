@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <vector>
@@ -7,66 +8,69 @@
 namespace atari
 {
 
-    struct Segment
+struct XexSegment
+{
+    std::uint16_t start = 0;
+    std::uint16_t end = 0;
+
+    std::vector<std::uint8_t> data;
+
+    [[nodiscard]]
+    std::size_t Size() const noexcept
     {
-        uint16_t start = 0;
-        uint16_t end = 0;
+        return data.size();
+    }
+};
 
-        std::vector<uint8_t> data;
+class XexFile
+{
+public:
 
-        [[nodiscard]]
-        uint16_t Size() const noexcept
-        {
-            return static_cast<uint16_t>(data.size());
-        }
-    };
+    XexFile() = default;
 
-    class XexFile
-    {
-    public:
+    void Clear();
 
-        XexFile() = default;
+    [[nodiscard]]
+    bool Empty() const noexcept;
 
-        void Clear();
+    void SetFilename(
+        const std::filesystem::path& filename);
 
-        [[nodiscard]]
-        bool Empty() const noexcept;
+    [[nodiscard]]
+    const std::filesystem::path& Filename() const noexcept;
 
-        void SetFilename(const std::filesystem::path& filename);
+    void AddSegment(
+        const XexSegment& segment);
 
-        [[nodiscard]]
-        const std::filesystem::path& Filename() const noexcept;
+    [[nodiscard]]
+    const std::vector<XexSegment>& Segments() const noexcept;
 
-        void AddSegment(const Segment& segment);
+    [[nodiscard]]
+    std::vector<XexSegment>& Segments() noexcept;
 
-        [[nodiscard]]
-        const std::vector<Segment>& Segments() const noexcept;
+    void SetRunAddress(
+        std::uint16_t address);
 
-        [[nodiscard]]
-        std::vector<Segment>& Segments() noexcept;
+    [[nodiscard]]
+    std::uint16_t RunAddress() const noexcept;
 
-        void SetRunAddress(uint16_t address);
+    void SetInitAddress(
+        std::uint16_t address);
 
-        [[nodiscard]]
-        uint16_t RunAddress() const noexcept;
+    [[nodiscard]]
+    std::uint16_t InitAddress() const noexcept;
 
-        void SetInitAddress(uint16_t address);
+    [[nodiscard]]
+    std::size_t Size() const noexcept;
 
-        [[nodiscard]]
-        uint16_t InitAddress() const noexcept;
+private:
 
-        [[nodiscard]]
-        size_t Size() const noexcept;
+    std::filesystem::path m_filename;
 
-    private:
+    std::vector<XexSegment> m_segments;
 
-        std::filesystem::path m_filename;
+    std::uint16_t m_runAddress = 0;
+    std::uint16_t m_initAddress = 0;
+};
 
-        std::vector<Segment> m_segments;
-
-        uint16_t m_runAddress = 0;
-
-        uint16_t m_initAddress = 0;
-    };
-
-}
+} // namespace atari
