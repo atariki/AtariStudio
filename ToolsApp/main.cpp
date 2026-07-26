@@ -106,6 +106,78 @@ const char* ConditionalRegionKindToString(
     }
 }
 
+const char* ProcessorFlagToString(
+    atari::ProcessorFlag flag)
+{
+    switch (flag)
+    {
+    case atari::ProcessorFlag::Carry:
+        return "C";
+
+    case atari::ProcessorFlag::Zero:
+        return "Z";
+
+    case atari::ProcessorFlag::Negative:
+        return "N";
+
+    case atari::ProcessorFlag::Overflow:
+        return "V";
+
+    default:
+        return "?";
+    }
+}
+
+const char* FlagStateOperator(
+    atari::FlagState state)
+{
+    switch (state)
+    {
+    case atari::FlagState::Clear:
+        return "== 0";
+
+    case atari::FlagState::Set:
+        return "== 1";
+
+    default:
+        return "?";
+    }
+}
+
+const char* BranchMnemonic(
+    atari::cpu6502::Instruction instruction)
+{
+    switch (instruction)
+    {
+    case atari::cpu6502::Instruction::BCC:
+        return "BCC";
+
+    case atari::cpu6502::Instruction::BCS:
+        return "BCS";
+
+    case atari::cpu6502::Instruction::BEQ:
+        return "BEQ";
+
+    case atari::cpu6502::Instruction::BNE:
+        return "BNE";
+
+    case atari::cpu6502::Instruction::BMI:
+        return "BMI";
+
+    case atari::cpu6502::Instruction::BPL:
+        return "BPL";
+
+    case atari::cpu6502::Instruction::BVC:
+        return "BVC";
+
+    case atari::cpu6502::Instruction::BVS:
+        return "BVS";
+
+    default:
+        return "?";
+    }
+}
+
 void PrintAddress(
     atari::u16 address)
 {
@@ -170,9 +242,7 @@ void PrintRelocationMap(
 
     if (relocation.ranges.empty())
     {
-        std::cout
-            << "  none\n";
-
+        std::cout << "  none\n";
         return;
     }
 
@@ -768,6 +838,105 @@ void PrintConditionalRegions(
     }
 }
 
+void PrintBranchConditions(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Branch Conditions\n"
+        << "=====================================\n";
+
+    for (const auto& routine :
+         analysis.branchConditions.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.routineName
+            << "  ";
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  conditions="
+            << routine.conditions.size()
+            << '\n';
+
+        if (routine.conditions.empty())
+        {
+            std::cout
+                << "  none\n";
+
+            continue;
+        }
+
+        for (const auto& condition :
+             routine.conditions)
+        {
+            std::cout
+                << "  header=";
+
+            PrintAddress(
+                condition.headerAddress);
+
+            std::cout
+                << " instruction=";
+
+            PrintAddress(
+                condition.instructionAddress);
+
+            std::cout
+                << ' '
+                << BranchMnemonic(
+                    condition.instruction)
+                << '\n';
+
+            std::cout
+                << "    branch taken: "
+                << ProcessorFlagToString(
+                    condition.flag)
+                << ' '
+                << FlagStateOperator(
+                    condition.branchTakenState)
+                << " -> ";
+
+            PrintAddress(
+                condition.branchTargetAddress);
+
+            std::cout
+                << '\n';
+
+            std::cout
+                << "    fall-through: "
+                << ProcessorFlagToString(
+                    condition.flag)
+                << ' '
+                << FlagStateOperator(
+                    condition.fallthroughState)
+                << " -> ";
+
+            PrintAddress(
+                condition.fallthroughTargetAddress);
+
+            std::cout
+                << '\n';
+
+            std::cout
+                << "    join: ";
+
+            PrintAddress(
+                condition.joinAddress);
+
+            std::cout
+                << "  region="
+                << ConditionalRegionKindToString(
+                    condition.regionKind)
+                << '\n';
+        }
+    }
+}
+
 void PrintNaturalLoops(
     const atari::AnalysisEngineResult& analysis)
 {
@@ -1344,6 +1513,9 @@ int main(
         << "  Conditional regions:      "
         << analysis.ConditionalRegionCount()
         << '\n'
+        << "  Branch conditions:        "
+        << analysis.BranchConditionCount()
+        << '\n'
         << "  If regions:               "
         << analysis.IfThenCount()
         << '\n'
@@ -1388,6 +1560,9 @@ int main(
         analysis);
 
     PrintConditionalRegions(
+        analysis);
+
+    PrintBranchConditions(
         analysis);
 
     PrintNaturalLoops(

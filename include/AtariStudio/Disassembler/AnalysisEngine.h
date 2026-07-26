@@ -7,6 +7,7 @@
 #include <AtariStudio/Core/Types.h>
 
 #include <AtariStudio/Disassembler/BasicBlockAnalyzer.h>
+#include <AtariStudio/Disassembler/BranchConditionAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
 #include <AtariStudio/Disassembler/ConditionalRegionAnalyzer.h>
@@ -42,6 +43,8 @@ struct AnalysisEngineResult
     PostDominatorAnalysisResult postDominators;
 
     ConditionalRegionAnalysisResult conditionals;
+
+    BranchConditionAnalysisResult branchConditions;
 
     NaturalLoopAnalysisResult loops;
 
@@ -151,6 +154,13 @@ struct AnalysisEngineResult
     {
         return
             conditionals.IfElseCount();
+    }
+
+    [[nodiscard]]
+    std::size_t BranchConditionCount() const noexcept
+    {
+        return
+            branchConditions.ConditionCount();
     }
 
     [[nodiscard]]
@@ -338,7 +348,7 @@ public:
 
         //
         // Phase 10:
-        // Structured conditional regions.
+        // Conditional regions.
         //
         ConditionalRegionAnalyzer
             conditionalRegionAnalyzer;
@@ -350,6 +360,19 @@ public:
 
         //
         // Phase 11:
+        // 6502 branch-condition semantics.
+        //
+        BranchConditionAnalyzer
+            branchConditionAnalyzer;
+
+        result.branchConditions =
+            branchConditionAnalyzer.Analyze(
+                project,
+                result.graphs,
+                result.conditionals);
+
+        //
+        // Phase 12:
         // Natural loops.
         //
         NaturalLoopAnalyzer
@@ -361,7 +384,7 @@ public:
                 result.dominators);
 
         //
-        // Phase 12:
+        // Phase 13:
         // Loop nesting.
         //
         LoopNestingAnalyzer
@@ -372,7 +395,7 @@ public:
                 result.loops);
 
         //
-        // Phase 13:
+        // Phase 14:
         // Listing.
         //
         result.listing.Build(
