@@ -16,6 +16,7 @@
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
 #include <AtariStudio/Disassembler/DominatorAnalyzer.h>
+#include <AtariStudio/Disassembler/LoopConditionAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopNestingAnalyzer.h>
 #include <AtariStudio/Disassembler/NaturalLoopAnalyzer.h>
 #include <AtariStudio/Disassembler/PostDominatorAnalyzer.h>
@@ -27,36 +28,89 @@ namespace atari
 
 struct AnalysisEngineResult
 {
+    //
+    // Control flow + relocation.
+    //
     ControlFlowAnalysisResult controlFlow;
 
+    //
+    // Symbols / XREF / relocation metadata.
+    //
     DisassemblyMetadata metadata;
 
+    //
+    // CODE / DATA regions.
+    //
     std::vector<CodeDataRegion> regions;
 
+    //
+    // Detected routines.
+    //
     RoutineAnalysisResult routines;
 
+    //
+    // Basic blocks.
+    //
     BasicBlockAnalysisResult basicBlocks;
 
+    //
+    // Per-routine CFG.
+    //
     ControlFlowGraphAnalysisResult graphs;
 
+    //
+    // Dominators + back edges.
+    //
     DominatorAnalysisResult dominators;
 
+    //
+    // Post-dominators.
+    //
     PostDominatorAnalysisResult postDominators;
 
+    //
+    // Conditional IF regions.
+    //
     ConditionalRegionAnalysisResult conditionals;
 
+    //
+    // Branch conditions used by IF regions.
+    //
     BranchConditionAnalysisResult branchConditions;
 
+    //
+    // High-level structured IF representation.
+    //
     StructuredControlFlowAnalysisResult structuredControlFlow;
 
+    //
+    // Natural loops.
+    //
     NaturalLoopAnalysisResult loops;
 
+    //
+    // Conditions controlling loops and loop exits.
+    //
+    LoopConditionAnalysisResult loopConditions;
+
+    //
+    // Loop nesting tree.
+    //
     LoopNestingAnalysisResult loopNesting;
 
+    //
+    // Final disassembly listing.
+    //
     DisassemblyListing listing;
 
+    //
+    // Number of instructions found by initial CFG walk.
+    //
     std::size_t cfgInstructionCount = 0;
 
+    //
+    // Additional instructions found as disconnected code.
+    //
     std::size_t codeIslandInstructionCount = 0;
 
     [[nodiscard]]
@@ -207,6 +261,13 @@ struct AnalysisEngineResult
     }
 
     [[nodiscard]]
+    std::size_t LoopConditionCount() const noexcept
+    {
+        return
+            loopConditions.ConditionCount();
+    }
+
+    [[nodiscard]]
     std::size_t LoopTreeNodeCount() const noexcept
     {
         return
@@ -245,6 +306,13 @@ public:
     {
         AnalysisEngineResult result;
 
+        //
+        // =====================================================
+        // Phase 0
+        //
+        // Clear executable flags from previous analysis.
+        // =====================================================
+        //
         ResetAnalysisState(
             project);
 
@@ -265,8 +333,11 @@ public:
         }
 
         //
-        // Phase 1:
-        // Control flow + relocation.
+        // =====================================================
+        // Phase 1
+        //
+        // Control-flow analysis + relocation detection.
+        // =====================================================
         //
         ControlFlowAnalyzer
             controlFlowAnalyzer;
@@ -277,12 +348,16 @@ public:
                 entryPoints);
 
         result.cfgInstructionCount =
-            result.controlFlow.
-                instructionAddresses.size();
+            result.controlFlow
+                .instructionAddresses
+                .size();
 
         //
-        // Phase 2:
-        // Disconnected code islands.
+        // =====================================================
+        // Phase 2
+        //
+        // Disconnected executable code islands.
+        // =====================================================
         //
         CodeIslandAnalyzer
             codeIslandAnalyzer;
@@ -292,21 +367,28 @@ public:
             result.controlFlow);
 
         result.codeIslandInstructionCount =
-            result.controlFlow.
-                instructionAddresses.size() -
+            result.controlFlow
+                .instructionAddresses
+                .size() -
             result.cfgInstructionCount;
 
         //
-        // Phase 3:
-        // Symbols + XREF.
+        // =====================================================
+        // Phase 3
+        //
+        // Symbols + XREF + relocation metadata.
+        // =====================================================
         //
         result.metadata.Build(
             project,
             result.controlFlow);
 
         //
-        // Phase 4:
-        // CODE / DATA.
+        // =====================================================
+        // Phase 4
+        //
+        // CODE / DATA classification.
+        // =====================================================
         //
         CodeDataAnalyzer
             codeDataAnalyzer;
@@ -316,8 +398,11 @@ public:
                 project);
 
         //
-        // Phase 5:
-        // Routines.
+        // =====================================================
+        // Phase 5
+        //
+        // Routine analysis.
+        // =====================================================
         //
         RoutineAnalyzer
             routineAnalyzer;
@@ -330,8 +415,11 @@ public:
                 result.regions);
 
         //
-        // Phase 6:
+        // =====================================================
+        // Phase 6
+        //
         // Basic blocks.
+        // =====================================================
         //
         BasicBlockAnalyzer
             basicBlockAnalyzer;
@@ -343,8 +431,11 @@ public:
                 result.routines);
 
         //
-        // Phase 7:
-        // CFG.
+        // =====================================================
+        // Phase 7
+        //
+        // Per-routine CFG.
+        // =====================================================
         //
         ControlFlowGraphBuilder
             graphBuilder;
@@ -354,8 +445,11 @@ public:
                 result.basicBlocks);
 
         //
-        // Phase 8:
-        // Dominators.
+        // =====================================================
+        // Phase 8
+        //
+        // Dominator analysis.
+        // =====================================================
         //
         DominatorAnalyzer
             dominatorAnalyzer;
@@ -365,8 +459,11 @@ public:
                 result.graphs);
 
         //
-        // Phase 9:
-        // Post-dominators.
+        // =====================================================
+        // Phase 9
+        //
+        // Post-dominator analysis.
+        // =====================================================
         //
         PostDominatorAnalyzer
             postDominatorAnalyzer;
@@ -376,8 +473,11 @@ public:
                 result.graphs);
 
         //
-        // Phase 10:
+        // =====================================================
+        // Phase 10
+        //
         // Conditional regions.
+        // =====================================================
         //
         ConditionalRegionAnalyzer
             conditionalRegionAnalyzer;
@@ -388,8 +488,11 @@ public:
                 result.postDominators);
 
         //
-        // Phase 11:
-        // Branch conditions.
+        // =====================================================
+        // Phase 11
+        //
+        // Raw 6502 branch conditions for IF regions.
+        // =====================================================
         //
         BranchConditionAnalyzer
             branchConditionAnalyzer;
@@ -401,8 +504,11 @@ public:
                 result.conditionals);
 
         //
-        // Phase 12:
-        // Structured high-level IF reconstruction.
+        // =====================================================
+        // Phase 12
+        //
+        // High-level structured IF reconstruction.
+        // =====================================================
         //
         StructuredControlFlowAnalyzer
             structuredControlFlowAnalyzer;
@@ -413,8 +519,11 @@ public:
                 result.branchConditions);
 
         //
-        // Phase 13:
-        // Natural loops.
+        // =====================================================
+        // Phase 13
+        //
+        // Natural-loop detection.
+        // =====================================================
         //
         NaturalLoopAnalyzer
             naturalLoopAnalyzer;
@@ -425,8 +534,40 @@ public:
                 result.dominators);
 
         //
-        // Phase 14:
-        // Loop nesting.
+        // =====================================================
+        // Phase 14
+        //
+        // Loop-condition analysis.
+        //
+        // Detect conditional branches for which:
+        //
+        //     one successor stays inside the natural loop
+        //     one successor leaves the natural loop
+        //
+        // This allows us to reconstruct:
+        //
+        //     while (...)
+        //     do ... while (...)
+        //     break-like conditions
+        //
+        // later.
+        // =====================================================
+        //
+        LoopConditionAnalyzer
+            loopConditionAnalyzer;
+
+        result.loopConditions =
+            loopConditionAnalyzer.Analyze(
+                project,
+                result.graphs,
+                result.loops);
+
+        //
+        // =====================================================
+        // Phase 15
+        //
+        // Loop nesting tree.
+        // =====================================================
         //
         LoopNestingAnalyzer
             loopNestingAnalyzer;
@@ -436,8 +577,11 @@ public:
                 result.loops);
 
         //
-        // Phase 15:
-        // Listing.
+        // =====================================================
+        // Phase 16
+        //
+        // Final disassembly listing.
+        // =====================================================
         //
         result.listing.Build(
             project,

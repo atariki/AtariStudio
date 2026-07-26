@@ -210,6 +210,29 @@ const char* StructuredArmToString(
 }
 
 // ============================================================
+// Loop condition helpers
+// ============================================================
+
+const char* LoopConditionPositionToString(
+    atari::LoopConditionPosition position)
+{
+    switch (position)
+    {
+    case atari::LoopConditionPosition::Header:
+        return "header";
+
+    case atari::LoopConditionPosition::Latch:
+        return "latch";
+
+    case atari::LoopConditionPosition::Body:
+        return "body";
+
+    default:
+        return "?";
+    }
+}
+
+// ============================================================
 // Address helpers
 // ============================================================
 
@@ -300,23 +323,27 @@ void PrintRelocationMap(
                 range.destinationBegin) +
             range.size - 1;
 
-        std::cout << "  ";
+        std::cout
+            << "  ";
 
         PrintAddress(
             range.sourceBegin);
 
-        std::cout << " - ";
+        std::cout
+            << " - ";
 
         PrintAddress(
             static_cast<atari::u16>(
                 sourceEnd));
 
-        std::cout << "  ->  ";
+        std::cout
+            << "  ->  ";
 
         PrintAddress(
             range.destinationBegin);
 
-        std::cout << " - ";
+        std::cout
+            << " - ";
 
         PrintAddress(
             static_cast<atari::u16>(
@@ -361,7 +388,8 @@ void PrintRoutines(
         PrintAddress(
             routine.entryAddress);
 
-        std::cout << " - ";
+        std::cout
+            << " - ";
 
         PrintAddress(
             routine.endAddress);
@@ -1331,6 +1359,161 @@ void PrintNaturalLoops(
 }
 
 // ============================================================
+// Loop Conditions
+// ============================================================
+
+void PrintLoopConditions(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Loop Conditions\n"
+        << "=====================================\n";
+
+    for (const auto& routine :
+         analysis.loopConditions.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.routineName
+            << "  ";
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  conditions="
+            << routine.conditions.size()
+            << '\n';
+
+        if (routine.conditions.empty())
+        {
+            std::cout
+                << "  none\n";
+
+            continue;
+        }
+
+        for (const auto& condition :
+             routine.conditions)
+        {
+            std::cout
+                << "\n  LOOP ";
+
+            PrintAddress(
+                condition.loopHeaderAddress);
+
+            std::cout
+                << "  source=";
+
+            PrintAddress(
+                condition.sourceBlockAddress);
+
+            std::cout
+                << "  position="
+                << LoopConditionPositionToString(
+                    condition.position)
+                << '\n';
+
+            std::cout
+                << "    instruction: ";
+
+            PrintAddress(
+                condition.instructionAddress);
+
+            std::cout
+                << ' '
+                << BranchMnemonic(
+                    condition.instruction)
+                << '\n';
+
+            std::cout
+                << "    branch taken: "
+                << ProcessorFlagToString(
+                    condition.flag)
+                << ' '
+                << FlagStateOperator(
+                    condition.branchTakenState)
+                << " -> ";
+
+            PrintAddress(
+                condition.branchTargetAddress);
+
+            if (condition.branchTakenContinues)
+            {
+                std::cout
+                    << "  [continue]";
+            }
+            else
+            {
+                std::cout
+                    << "  [exit]";
+            }
+
+            std::cout
+                << '\n';
+
+            std::cout
+                << "    fall-through: "
+                << ProcessorFlagToString(
+                    condition.flag)
+                << ' '
+                << FlagStateOperator(
+                    condition.fallthroughState)
+                << " -> ";
+
+            PrintAddress(
+                condition.fallthroughTargetAddress);
+
+            if (condition.branchTakenContinues)
+            {
+                std::cout
+                    << "  [exit]";
+            }
+            else
+            {
+                std::cout
+                    << "  [continue]";
+            }
+
+            std::cout
+                << '\n';
+
+            std::cout
+                << "    continue condition: "
+                << ProcessorFlagToString(
+                    condition.flag)
+                << ' '
+                << FlagStateOperator(
+                    condition.continueState)
+                << " -> ";
+
+            PrintAddress(
+                condition.continueTargetAddress);
+
+            std::cout
+                << '\n';
+
+            std::cout
+                << "    exit condition:     "
+                << ProcessorFlagToString(
+                    condition.flag)
+                << ' '
+                << FlagStateOperator(
+                    condition.exitState)
+                << " -> ";
+
+            PrintAddress(
+                condition.exitTargetAddress);
+
+            std::cout
+                << '\n';
+        }
+    }
+}
+
+// ============================================================
 // Loop Nesting
 // ============================================================
 
@@ -1865,6 +2048,9 @@ int main(
         << "  Loop exits:               "
         << analysis.LoopExitCount()
         << '\n'
+        << "  Loop conditions:          "
+        << analysis.LoopConditionCount()
+        << '\n'
         << "  Loop tree nodes:          "
         << analysis.LoopTreeNodeCount()
         << '\n'
@@ -1912,6 +2098,9 @@ int main(
     PrintNaturalLoops(
         analysis);
 
+    PrintLoopConditions(
+        analysis);
+
     PrintLoopNesting(
         analysis);
 
@@ -1921,8 +2110,8 @@ int main(
     //
     // Do not add std::cin.get().
     //
-    // TestApp must terminate automatically so that
-    // TestApp.exe is not locked during the next build.
+    // TestApp must terminate automatically so the EXE
+    // is not locked during the next build.
     //
     return 0;
 }
