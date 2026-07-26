@@ -18,6 +18,7 @@
 #include <AtariStudio/Disassembler/DominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopConditionAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopNestingAnalyzer.h>
+#include <AtariStudio/Disassembler/LoopStructureAnalyzer.h>
 #include <AtariStudio/Disassembler/NaturalLoopAnalyzer.h>
 #include <AtariStudio/Disassembler/PostDominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
@@ -29,270 +30,404 @@ namespace atari
 struct AnalysisEngineResult
 {
     //
-    // Control flow + relocation.
+    // ========================================================
+    // Core control-flow analysis
+    // ========================================================
     //
+
     ControlFlowAnalysisResult controlFlow;
 
-    //
-    // Symbols / XREF / relocation metadata.
-    //
     DisassemblyMetadata metadata;
 
-    //
-    // CODE / DATA regions.
-    //
     std::vector<CodeDataRegion> regions;
 
-    //
-    // Detected routines.
-    //
     RoutineAnalysisResult routines;
 
-    //
-    // Basic blocks.
-    //
     BasicBlockAnalysisResult basicBlocks;
 
-    //
-    // Per-routine CFG.
-    //
     ControlFlowGraphAnalysisResult graphs;
 
     //
-    // Dominators + back edges.
+    // ========================================================
+    // Dominator analysis
+    // ========================================================
     //
+
     DominatorAnalysisResult dominators;
 
-    //
-    // Post-dominators.
-    //
     PostDominatorAnalysisResult postDominators;
 
     //
-    // Conditional IF regions.
+    // ========================================================
+    // Conditional reconstruction
+    // ========================================================
     //
+
     ConditionalRegionAnalysisResult conditionals;
 
-    //
-    // Branch conditions used by IF regions.
-    //
     BranchConditionAnalysisResult branchConditions;
 
-    //
-    // High-level structured IF representation.
-    //
     StructuredControlFlowAnalysisResult structuredControlFlow;
 
     //
-    // Natural loops.
+    // ========================================================
+    // Loop reconstruction
+    // ========================================================
     //
+
     NaturalLoopAnalysisResult loops;
 
-    //
-    // Conditions controlling loops and loop exits.
-    //
     LoopConditionAnalysisResult loopConditions;
 
-    //
-    // Loop nesting tree.
-    //
     LoopNestingAnalysisResult loopNesting;
 
+    LoopStructureAnalysisResult loopStructures;
+
     //
-    // Final disassembly listing.
+    // ========================================================
+    // Final listing
+    // ========================================================
     //
+
     DisassemblyListing listing;
 
     //
-    // Number of instructions found by initial CFG walk.
+    // ========================================================
+    // Analysis counters
+    // ========================================================
     //
+
     std::size_t cfgInstructionCount = 0;
 
-    //
-    // Additional instructions found as disconnected code.
-    //
     std::size_t codeIslandInstructionCount = 0;
+
+    // --------------------------------------------------------
+    // Instructions
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t TotalInstructionCount() const noexcept
     {
         return
-            controlFlow.instructionAddresses.size();
+            controlFlow
+                .instructionAddresses
+                .size();
     }
+
+    // --------------------------------------------------------
+    // Metadata
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t CrossReferenceCount() const noexcept
     {
         return
-            metadata.CrossReferences().references.size();
+            metadata
+                .CrossReferences()
+                .references
+                .size();
     }
 
     [[nodiscard]]
     std::size_t SymbolCount() const noexcept
     {
         return
-            metadata.Symbols().Size();
+            metadata
+                .Symbols()
+                .Size();
     }
+
+    // --------------------------------------------------------
+    // Routines
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t RoutineCount() const noexcept
     {
         return
-            routines.routines.size();
+            routines
+                .routines
+                .size();
     }
+
+    // --------------------------------------------------------
+    // Basic blocks
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t BasicBlockCount() const noexcept
     {
         return
-            basicBlocks.BlockCount();
+            basicBlocks
+                .BlockCount();
     }
+
+    // --------------------------------------------------------
+    // CFG
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t GraphNodeCount() const noexcept
     {
         return
-            graphs.NodeCount();
+            graphs
+                .NodeCount();
     }
 
     [[nodiscard]]
     std::size_t GraphEdgeCount() const noexcept
     {
         return
-            graphs.EdgeCount();
+            graphs
+                .EdgeCount();
     }
+
+    // --------------------------------------------------------
+    // Dominators
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t DominatorNodeCount() const noexcept
     {
         return
-            dominators.NodeCount();
+            dominators
+                .NodeCount();
     }
 
     [[nodiscard]]
     std::size_t BackEdgeCount() const noexcept
     {
         return
-            dominators.BackEdgeCount();
+            dominators
+                .BackEdgeCount();
     }
+
+    // --------------------------------------------------------
+    // Post-dominators
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t PostDominatorNodeCount() const noexcept
     {
         return
-            postDominators.NodeCount();
+            postDominators
+                .NodeCount();
     }
 
     [[nodiscard]]
     std::size_t PostDominatorTerminalCount() const noexcept
     {
         return
-            postDominators.TerminalCount();
+            postDominators
+                .TerminalCount();
     }
+
+    // --------------------------------------------------------
+    // Conditional regions
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t ConditionalRegionCount() const noexcept
     {
         return
-            conditionals.RegionCount();
+            conditionals
+                .RegionCount();
     }
 
     [[nodiscard]]
     std::size_t IfThenCount() const noexcept
     {
         return
-            conditionals.IfThenCount();
+            conditionals
+                .IfThenCount();
     }
 
     [[nodiscard]]
     std::size_t IfElseCount() const noexcept
     {
         return
-            conditionals.IfElseCount();
+            conditionals
+                .IfElseCount();
     }
+
+    // --------------------------------------------------------
+    // Branch conditions
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t BranchConditionCount() const noexcept
     {
         return
-            branchConditions.ConditionCount();
+            branchConditions
+                .ConditionCount();
     }
+
+    // --------------------------------------------------------
+    // Structured IFs
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t StructuredIfCount() const noexcept
     {
         return
-            structuredControlFlow.IfCount();
+            structuredControlFlow
+                .IfCount();
     }
 
     [[nodiscard]]
     std::size_t StructuredIfElseCount() const noexcept
     {
         return
-            structuredControlFlow.IfElseCount();
+            structuredControlFlow
+                .IfElseCount();
     }
 
     [[nodiscard]]
     std::size_t StructuredRootCount() const noexcept
     {
         return
-            structuredControlFlow.RootCount();
+            structuredControlFlow
+                .RootCount();
     }
 
     [[nodiscard]]
     std::size_t StructuredMaximumDepth() const noexcept
     {
         return
-            structuredControlFlow.MaximumDepth();
+            structuredControlFlow
+                .MaximumDepth();
     }
+
+    // --------------------------------------------------------
+    // Natural loops
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t NaturalLoopCount() const noexcept
     {
         return
-            loops.LoopCount();
+            loops
+                .LoopCount();
     }
 
     [[nodiscard]]
     std::size_t LoopExitCount() const noexcept
     {
         return
-            loops.ExitCount();
+            loops
+                .ExitCount();
     }
+
+    // --------------------------------------------------------
+    // Loop conditions
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t LoopConditionCount() const noexcept
     {
         return
-            loopConditions.ConditionCount();
+            loopConditions
+                .ConditionCount();
     }
+
+    // --------------------------------------------------------
+    // Loop nesting
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t LoopTreeNodeCount() const noexcept
     {
         return
-            loopNesting.NodeCount();
+            loopNesting
+                .NodeCount();
     }
 
     [[nodiscard]]
     std::size_t RootLoopCount() const noexcept
     {
         return
-            loopNesting.RootCount();
+            loopNesting
+                .RootCount();
     }
 
     [[nodiscard]]
     std::size_t MaximumLoopDepth() const noexcept
     {
         return
-            loopNesting.MaximumDepth();
+            loopNesting
+                .MaximumDepth();
     }
+
+    // --------------------------------------------------------
+    // Structured loops
+    // --------------------------------------------------------
+
+    [[nodiscard]]
+    std::size_t StructuredLoopCount() const noexcept
+    {
+        return
+            loopStructures
+                .LoopCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredWhileCount() const noexcept
+    {
+        return
+            loopStructures
+                .WhileCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredDoWhileCount() const noexcept
+    {
+        return
+            loopStructures
+                .DoWhileCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredInfiniteLoopCount() const noexcept
+    {
+        return
+            loopStructures
+                .InfiniteCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredComplexLoopCount() const noexcept
+    {
+        return
+            loopStructures
+                .ComplexCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredBreakConditionCount() const noexcept
+    {
+        return
+            loopStructures
+                .BreakConditionCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredLoopMaximumDepth() const noexcept
+    {
+        return
+            loopStructures
+                .MaximumDepth();
+    }
+
+    // --------------------------------------------------------
+    // Listing
+    // --------------------------------------------------------
 
     [[nodiscard]]
     std::size_t ListingRowCount() const noexcept
     {
         return
-            listing.RowCount();
+            listing
+                .RowCount();
     }
 };
 
@@ -313,6 +448,7 @@ public:
         // Clear executable flags from previous analysis.
         // =====================================================
         //
+
         ResetAnalysisState(
             project);
 
@@ -339,6 +475,7 @@ public:
         // Control-flow analysis + relocation detection.
         // =====================================================
         //
+
         ControlFlowAnalyzer
             controlFlowAnalyzer;
 
@@ -356,9 +493,10 @@ public:
         // =====================================================
         // Phase 2
         //
-        // Disconnected executable code islands.
+        // Search for disconnected executable code islands.
         // =====================================================
         //
+
         CodeIslandAnalyzer
             codeIslandAnalyzer;
 
@@ -376,9 +514,10 @@ public:
         // =====================================================
         // Phase 3
         //
-        // Symbols + XREF + relocation metadata.
+        // Build symbols, XREFs and relocation metadata.
         // =====================================================
         //
+
         result.metadata.Build(
             project,
             result.controlFlow);
@@ -390,6 +529,7 @@ public:
         // CODE / DATA classification.
         // =====================================================
         //
+
         CodeDataAnalyzer
             codeDataAnalyzer;
 
@@ -401,9 +541,10 @@ public:
         // =====================================================
         // Phase 5
         //
-        // Routine analysis.
+        // Routine detection.
         // =====================================================
         //
+
         RoutineAnalyzer
             routineAnalyzer;
 
@@ -418,9 +559,10 @@ public:
         // =====================================================
         // Phase 6
         //
-        // Basic blocks.
+        // Basic-block analysis.
         // =====================================================
         //
+
         BasicBlockAnalyzer
             basicBlockAnalyzer;
 
@@ -434,9 +576,10 @@ public:
         // =====================================================
         // Phase 7
         //
-        // Per-routine CFG.
+        // Build per-routine control-flow graphs.
         // =====================================================
         //
+
         ControlFlowGraphBuilder
             graphBuilder;
 
@@ -448,9 +591,10 @@ public:
         // =====================================================
         // Phase 8
         //
-        // Dominator analysis.
+        // Dominator analysis + back edges.
         // =====================================================
         //
+
         DominatorAnalyzer
             dominatorAnalyzer;
 
@@ -465,6 +609,7 @@ public:
         // Post-dominator analysis.
         // =====================================================
         //
+
         PostDominatorAnalyzer
             postDominatorAnalyzer;
 
@@ -476,9 +621,10 @@ public:
         // =====================================================
         // Phase 10
         //
-        // Conditional regions.
+        // Detect structured conditional regions.
         // =====================================================
         //
+
         ConditionalRegionAnalyzer
             conditionalRegionAnalyzer;
 
@@ -491,9 +637,10 @@ public:
         // =====================================================
         // Phase 11
         //
-        // Raw 6502 branch conditions for IF regions.
+        // Decode 6502 branch semantics for IF regions.
         // =====================================================
         //
+
         BranchConditionAnalyzer
             branchConditionAnalyzer;
 
@@ -507,9 +654,10 @@ public:
         // =====================================================
         // Phase 12
         //
-        // High-level structured IF reconstruction.
+        // Reconstruct high-level IF structures.
         // =====================================================
         //
+
         StructuredControlFlowAnalyzer
             structuredControlFlowAnalyzer;
 
@@ -525,6 +673,7 @@ public:
         // Natural-loop detection.
         // =====================================================
         //
+
         NaturalLoopAnalyzer
             naturalLoopAnalyzer;
 
@@ -539,20 +688,16 @@ public:
         //
         // Loop-condition analysis.
         //
-        // Detect conditional branches for which:
+        // Finds conditions that:
         //
-        //     one successor stays inside the natural loop
-        //     one successor leaves the natural loop
-        //
-        // This allows us to reconstruct:
-        //
-        //     while (...)
-        //     do ... while (...)
-        //     break-like conditions
-        //
-        // later.
+        //   - remain inside the loop;
+        //   - leave the loop;
+        //   - occur in the header;
+        //   - occur in a latch;
+        //   - occur inside the body.
         // =====================================================
         //
+
         LoopConditionAnalyzer
             loopConditionAnalyzer;
 
@@ -566,9 +711,10 @@ public:
         // =====================================================
         // Phase 15
         //
-        // Loop nesting tree.
+        // Loop nesting hierarchy.
         // =====================================================
         //
+
         LoopNestingAnalyzer
             loopNestingAnalyzer;
 
@@ -580,9 +726,47 @@ public:
         // =====================================================
         // Phase 16
         //
+        // High-level loop reconstruction.
+        //
+        // NaturalLoop
+        //      +
+        // LoopCondition
+        //      +
+        // LoopNesting
+        //
+        // becomes:
+        //
+        //     while (...)
+        //
+        //     do
+        //     {
+        //     }
+        //     while (...);
+        //
+        //     for (;;)
+        //
+        //     complex loop
+        //
+        // =====================================================
+        //
+
+        LoopStructureAnalyzer
+            loopStructureAnalyzer;
+
+        result.loopStructures =
+            loopStructureAnalyzer.Analyze(
+                result.loops,
+                result.loopConditions,
+                result.loopNesting);
+
+        //
+        // =====================================================
+        // Phase 17
+        //
         // Final disassembly listing.
         // =====================================================
         //
+
         result.listing.Build(
             project,
             result.controlFlow,

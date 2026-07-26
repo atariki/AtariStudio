@@ -210,7 +210,7 @@ const char* StructuredArmToString(
 }
 
 // ============================================================
-// Loop condition helpers
+// Loop helpers
 // ============================================================
 
 const char* LoopConditionPositionToString(
@@ -226,6 +226,28 @@ const char* LoopConditionPositionToString(
 
     case atari::LoopConditionPosition::Body:
         return "body";
+
+    default:
+        return "?";
+    }
+}
+
+const char* StructuredLoopKindToString(
+    atari::StructuredLoopKind kind)
+{
+    switch (kind)
+    {
+    case atari::StructuredLoopKind::While:
+        return "while";
+
+    case atari::StructuredLoopKind::DoWhile:
+        return "do-while";
+
+    case atari::StructuredLoopKind::Infinite:
+        return "infinite";
+
+    case atari::StructuredLoopKind::Complex:
+        return "complex";
 
     default:
         return "?";
@@ -271,7 +293,9 @@ void PrintAddressList(
 {
     if (addresses.empty())
     {
-        std::cout << "none";
+        std::cout
+            << "none";
+
         return;
     }
 
@@ -281,7 +305,8 @@ void PrintAddressList(
     {
         if (i != 0)
         {
-            std::cout << ", ";
+            std::cout
+                << ", ";
         }
 
         PrintAddress(
@@ -1608,6 +1633,478 @@ void PrintLoopNesting(
 }
 
 // ============================================================
+// Structured Loops
+// ============================================================
+
+void PrintStructuredLoops(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Structured Loops\n"
+        << "=====================================\n";
+
+    for (const auto& routine :
+         analysis.loopStructures.routines)
+    {
+        std::cout
+            << "\n"
+            << routine.routineName
+            << "  ";
+
+        PrintAddress(
+            routine.routineEntryAddress);
+
+        std::cout
+            << std::dec
+            << "  loops="
+            << routine.loops.size()
+            << " while="
+            << routine.WhileCount()
+            << " do-while="
+            << routine.DoWhileCount()
+            << " infinite="
+            << routine.InfiniteCount()
+            << " complex="
+            << routine.ComplexCount()
+            << " breaks="
+            << routine.BreakConditionCount()
+            << '\n';
+
+        if (routine.loops.empty())
+        {
+            std::cout
+                << "  none\n";
+
+            continue;
+        }
+
+        for (const auto& loop :
+             routine.loops)
+        {
+            std::cout
+                << "\n  LOOP ";
+
+            PrintAddress(
+                loop.headerAddress);
+
+            std::cout
+                << "  kind="
+                << StructuredLoopKindToString(
+                    loop.kind)
+                << "  depth="
+                << std::dec
+                << loop.depth;
+
+            if (loop.selfLoop)
+            {
+                std::cout
+                    << "  [self]";
+            }
+
+            std::cout
+                << '\n';
+
+            std::cout
+                << "    parent: ";
+
+            if (loop.parentHeaderAddress.has_value())
+            {
+                PrintAddress(
+                    loop.parentHeaderAddress.value());
+            }
+            else
+            {
+                std::cout
+                    << "none";
+            }
+
+            std::cout
+                << "\n    children: ";
+
+            PrintAddressList(
+                loop.childHeaders);
+
+            std::cout
+                << "\n    blocks: ";
+
+            PrintAddressList(
+                loop.blockAddresses);
+
+            std::cout
+                << "\n    latches: ";
+
+            PrintAddressList(
+                loop.latchAddresses);
+
+            std::cout
+                << "\n    exits: ";
+
+            PrintAddressList(
+                loop.exitAddresses);
+
+            std::cout
+                << '\n';
+
+            // ------------------------------------------------
+            // Primary loop condition
+            // ------------------------------------------------
+
+            if (loop.primaryCondition.has_value())
+            {
+                const auto& condition =
+                    loop.primaryCondition.value();
+
+                std::cout
+                    << "    primary condition:\n";
+
+                std::cout
+                    << "      position: "
+                    << LoopConditionPositionToString(
+                        condition.position)
+                    << '\n';
+
+                std::cout
+                    << "      source:   ";
+
+                PrintAddress(
+                    condition.sourceBlockAddress);
+
+                std::cout
+                    << '\n';
+
+                std::cout
+                    << "      branch:   ";
+
+                PrintAddress(
+                    condition.instructionAddress);
+
+                std::cout
+                    << ' '
+                    << BranchMnemonic(
+                        condition.instruction)
+                    << '\n';
+
+                std::cout
+                    << "      continue: "
+                    << ProcessorFlagToString(
+                        condition.flag)
+                    << ' '
+                    << FlagStateOperator(
+                        condition.continueState)
+                    << " -> ";
+
+                PrintAddress(
+                    condition.continueTargetAddress);
+
+                std::cout
+                    << '\n';
+
+                std::cout
+                    << "      exit:     "
+                    << ProcessorFlagToString(
+                        condition.flag)
+                    << ' '
+                    << FlagStateOperator(
+                        condition.exitState)
+                    << " -> ";
+
+                PrintAddress(
+                    condition.exitTargetAddress);
+
+                std::cout
+                    << '\n';
+            }
+            else
+            {
+                std::cout
+                    << "    primary condition: none\n";
+            }
+
+            // ------------------------------------------------
+            // Header conditions
+            // ------------------------------------------------
+
+            std::cout
+                << "    header conditions: "
+                << std::dec
+                << loop.headerConditions.size()
+                << '\n';
+
+            for (const auto& condition :
+                 loop.headerConditions)
+            {
+                std::cout
+                    << "      ";
+
+                PrintAddress(
+                    condition.instructionAddress);
+
+                std::cout
+                    << ' '
+                    << BranchMnemonic(
+                        condition.instruction)
+                    << "  continue when "
+                    << ProcessorFlagToString(
+                        condition.flag)
+                    << ' '
+                    << FlagStateOperator(
+                        condition.continueState)
+                    << "  exit ";
+
+                PrintAddress(
+                    condition.exitTargetAddress);
+
+                std::cout
+                    << '\n';
+            }
+
+            // ------------------------------------------------
+            // Latch conditions
+            // ------------------------------------------------
+
+            std::cout
+                << "    latch conditions: "
+                << std::dec
+                << loop.latchConditions.size()
+                << '\n';
+
+            for (const auto& condition :
+                 loop.latchConditions)
+            {
+                std::cout
+                    << "      ";
+
+                PrintAddress(
+                    condition.instructionAddress);
+
+                std::cout
+                    << ' '
+                    << BranchMnemonic(
+                        condition.instruction)
+                    << "  continue when "
+                    << ProcessorFlagToString(
+                        condition.flag)
+                    << ' '
+                    << FlagStateOperator(
+                        condition.continueState)
+                    << "  exit ";
+
+                PrintAddress(
+                    condition.exitTargetAddress);
+
+                std::cout
+                    << '\n';
+            }
+
+            // ------------------------------------------------
+            // Body / break-like conditions
+            // ------------------------------------------------
+
+            std::cout
+                << "    body conditions: "
+                << std::dec
+                << loop.bodyConditions.size()
+                << '\n';
+
+            for (const auto& condition :
+                 loop.bodyConditions)
+            {
+                std::cout
+                    << "      BREAK-LIKE ";
+
+                PrintAddress(
+                    condition.instructionAddress);
+
+                std::cout
+                    << ' '
+                    << BranchMnemonic(
+                        condition.instruction)
+                    << '\n';
+
+                std::cout
+                    << "        continue when "
+                    << ProcessorFlagToString(
+                        condition.flag)
+                    << ' '
+                    << FlagStateOperator(
+                        condition.continueState)
+                    << " -> ";
+
+                PrintAddress(
+                    condition.continueTargetAddress);
+
+                std::cout
+                    << '\n';
+
+                std::cout
+                    << "        break when    "
+                    << ProcessorFlagToString(
+                        condition.flag)
+                    << ' '
+                    << FlagStateOperator(
+                        condition.exitState)
+                    << " -> ";
+
+                PrintAddress(
+                    condition.exitTargetAddress);
+
+                std::cout
+                    << '\n';
+            }
+
+            // ------------------------------------------------
+            // Pseudo representation
+            // ------------------------------------------------
+
+            std::cout
+                << "    reconstructed:\n";
+
+            switch (loop.kind)
+            {
+            case atari::StructuredLoopKind::While:
+
+                if (loop.primaryCondition.has_value())
+                {
+                    const auto& condition =
+                        loop.primaryCondition.value();
+
+                    std::cout
+                        << "      while ("
+                        << ProcessorFlagToString(
+                            condition.flag)
+                        << ' '
+                        << FlagStateOperator(
+                            condition.continueState)
+                        << ")\n"
+                        << "      {\n"
+                        << "          ...\n"
+                        << "      }\n";
+                }
+                else
+                {
+                    std::cout
+                        << "      while (...)\n"
+                        << "      {\n"
+                        << "          ...\n"
+                        << "      }\n";
+                }
+
+                break;
+
+            case atari::StructuredLoopKind::DoWhile:
+
+                std::cout
+                    << "      do\n"
+                    << "      {\n"
+                    << "          ...\n"
+                    << "      }\n";
+
+                if (loop.primaryCondition.has_value())
+                {
+                    const auto& condition =
+                        loop.primaryCondition.value();
+
+                    std::cout
+                        << "      while ("
+                        << ProcessorFlagToString(
+                            condition.flag)
+                        << ' '
+                        << FlagStateOperator(
+                            condition.continueState)
+                        << ");\n";
+                }
+                else
+                {
+                    std::cout
+                        << "      while (...);\n";
+                }
+
+                break;
+
+            case atari::StructuredLoopKind::Infinite:
+
+                std::cout
+                    << "      for (;;)\n"
+                    << "      {\n";
+
+                if (!loop.bodyConditions.empty())
+                {
+                    for (const auto& condition :
+                         loop.bodyConditions)
+                    {
+                        std::cout
+                            << "          if ("
+                            << ProcessorFlagToString(
+                                condition.flag)
+                            << ' '
+                            << FlagStateOperator(
+                                condition.exitState)
+                            << ")\n"
+                            << "          {\n"
+                            << "              break;\n"
+                            << "          }\n";
+                    }
+                }
+                else
+                {
+                    std::cout
+                        << "          ...\n";
+                }
+
+                std::cout
+                    << "      }\n";
+
+                break;
+
+            case atari::StructuredLoopKind::Complex:
+
+                std::cout
+                    << "      /* complex loop */\n"
+                    << "      for (;;)\n"
+                    << "      {\n";
+
+                if (!loop.headerConditions.empty())
+                {
+                    std::cout
+                        << "          /* header conditions: "
+                        << loop.headerConditions.size()
+                        << " */\n";
+                }
+
+                if (!loop.bodyConditions.empty())
+                {
+                    std::cout
+                        << "          /* body exit conditions: "
+                        << loop.bodyConditions.size()
+                        << " */\n";
+                }
+
+                if (!loop.latchConditions.empty())
+                {
+                    std::cout
+                        << "          /* latch conditions: "
+                        << loop.latchConditions.size()
+                        << " */\n";
+                }
+
+                std::cout
+                    << "      }\n";
+
+                break;
+
+            default:
+
+                std::cout
+                    << "      unknown\n";
+
+                break;
+            }
+        }
+    }
+}
+
+// ============================================================
 // Listing
 // ============================================================
 
@@ -2060,6 +2557,27 @@ int main(
         << "  Maximum loop depth:       "
         << analysis.MaximumLoopDepth()
         << '\n'
+        << "  Structured loops:         "
+        << analysis.StructuredLoopCount()
+        << '\n'
+        << "  Structured while:         "
+        << analysis.StructuredWhileCount()
+        << '\n'
+        << "  Structured do-while:      "
+        << analysis.StructuredDoWhileCount()
+        << '\n'
+        << "  Structured infinite:      "
+        << analysis.StructuredInfiniteLoopCount()
+        << '\n'
+        << "  Structured complex:       "
+        << analysis.StructuredComplexLoopCount()
+        << '\n'
+        << "  Structured break tests:   "
+        << analysis.StructuredBreakConditionCount()
+        << '\n'
+        << "  Structured loop depth:    "
+        << analysis.StructuredLoopMaximumDepth()
+        << '\n'
         << "  Listing rows:             "
         << analysis.ListingRowCount()
         << '\n';
@@ -2104,14 +2622,16 @@ int main(
     PrintLoopNesting(
         analysis);
 
+    PrintStructuredLoops(
+        analysis);
+
     PrintListing(
         analysis);
 
     //
-    // Do not add std::cin.get().
+    // TestApp must terminate automatically.
     //
-    // TestApp must terminate automatically so the EXE
-    // is not locked during the next build.
+    // Do not add std::cin.get().
     //
     return 0;
 }
