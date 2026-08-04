@@ -212,6 +212,153 @@ std::string SerializeListing(
     return stream.str();
 }
 
+std::string SerializeDisplayLists(
+    const atari::DisplayListAnalysisResult& analysis)
+{
+    std::ostringstream stream;
+
+    for (const auto entryPoint :
+         analysis.entryPoints)
+    {
+        stream << "entry:" << entryPoint << '\n';
+    }
+
+    for (const auto& displayList :
+         analysis.displayLists)
+    {
+        stream
+            << "list:"
+            << displayList.entryPoint
+            << ':'
+            << static_cast<int>(
+                   displayList.stopReason)
+            << ':';
+
+        if (displayList.stopAddress.has_value())
+        {
+            stream << displayList.stopAddress.value();
+        }
+
+        stream << '\n';
+
+        for (const auto& instruction :
+             displayList.instructions)
+        {
+            stream
+                << instruction.address
+                << ':'
+                << static_cast<unsigned>(
+                       instruction.opcode)
+                << ':'
+                << static_cast<unsigned>(
+                       instruction.mode)
+                << ':'
+                << static_cast<unsigned>(
+                       instruction.length)
+                << ':'
+                << static_cast<int>(
+                       instruction.kind)
+                << ':'
+                << instruction.displayListInterrupt
+                << ':'
+                << instruction.horizontalScroll
+                << ':'
+                << instruction.verticalScroll
+                << ':'
+                << instruction.loadMemoryScan
+                << ':'
+                << instruction.reservedJumpModifier
+                << ':'
+                << static_cast<unsigned>(
+                       instruction.blankScanLines)
+                << ':';
+
+            if (instruction.jumpAddress.has_value())
+            {
+                stream << instruction.jumpAddress.value();
+            }
+
+            stream << ':';
+
+            if (instruction.memoryScanAddress.has_value())
+            {
+                stream
+                    << instruction.memoryScanAddress.value();
+            }
+
+            stream << '\n';
+        }
+    }
+
+    stream << "screen:";
+
+    for (const auto address :
+         analysis.screenMemoryAddresses)
+    {
+        stream << address << ',';
+    }
+
+    return stream.str();
+}
+
+std::string SerializeCharacterSets(
+    const atari::CharacterSetAnalysisResult& analysis)
+{
+    std::ostringstream stream;
+
+    for (const auto& request :
+         analysis.requests)
+    {
+        stream
+            << "request:"
+            << request.baseAddress
+            << ':'
+            << static_cast<int>(request.layout)
+            << '\n';
+    }
+
+    for (const auto& characterSet :
+         analysis.characterSets)
+    {
+        stream
+            << "set:"
+            << characterSet.baseAddress
+            << ':'
+            << static_cast<int>(characterSet.layout)
+            << ':'
+            << characterSet.expectedGlyphCount
+            << ':'
+            << characterSet.initializedByteCount
+            << ':'
+            << characterSet.addressSpaceTruncated
+            << '\n';
+
+        for (const auto& glyph :
+             characterSet.glyphs)
+        {
+            stream
+                << static_cast<unsigned>(glyph.index)
+                << ':'
+                << glyph.address
+                << ':'
+                << static_cast<unsigned>(
+                       glyph.initializedRowMask)
+                << ':';
+
+            for (const auto row : glyph.rows)
+            {
+                stream
+                    << static_cast<unsigned>(row)
+                    << ',';
+            }
+
+            stream << '\n';
+        }
+    }
+
+    return stream.str();
+}
+
 bool SameAnalysis(
     const atari::AnalysisEngineResult& left,
     const atari::AnalysisEngineResult& right)
@@ -231,6 +378,18 @@ bool SameAnalysis(
             right.codeIslandInstructionCount &&
         left.TotalInstructionCount() ==
             right.TotalInstructionCount() &&
+        left.DisplayListCount() ==
+            right.DisplayListCount() &&
+        left.DisplayListInstructionCount() ==
+            right.DisplayListInstructionCount() &&
+        SerializeDisplayLists(left.displayLists) ==
+            SerializeDisplayLists(right.displayLists) &&
+        left.CharacterSetCount() ==
+            right.CharacterSetCount() &&
+        left.CharacterGlyphCount() ==
+            right.CharacterGlyphCount() &&
+        SerializeCharacterSets(left.characterSets) ==
+            SerializeCharacterSets(right.characterSets) &&
         left.CrossReferenceCount() ==
             right.CrossReferenceCount() &&
         left.RoutineCount() ==

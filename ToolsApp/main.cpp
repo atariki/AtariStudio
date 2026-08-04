@@ -469,6 +469,245 @@ void PrintAddressList(
     }
 }
 
+const char* DisplayListInstructionKindToString(
+    atari::DisplayListInstructionKind kind)
+{
+    switch (kind)
+    {
+    case atari::DisplayListInstructionKind::Blank:
+        return "blank";
+
+    case atari::DisplayListInstructionKind::ModeLine:
+        return "mode";
+
+    case atari::DisplayListInstructionKind::Jump:
+        return "jmp";
+
+    case atari::DisplayListInstructionKind::
+        JumpAndWaitForVerticalBlank:
+        return "jvb";
+
+    default:
+        return "?";
+    }
+}
+
+const char* DisplayListStopReasonToString(
+    atari::DisplayListStopReason reason)
+{
+    switch (reason)
+    {
+    case atari::DisplayListStopReason::None:
+        return "none";
+
+    case atari::DisplayListStopReason::
+        JumpAndWaitForVerticalBlank:
+        return "jvb";
+
+    case atari::DisplayListStopReason::
+        UninitializedMemory:
+        return "uninitialized-memory";
+
+    case atari::DisplayListStopReason::
+        TruncatedInstruction:
+        return "truncated-instruction";
+
+    case atari::DisplayListStopReason::
+        AddressSpaceBoundary:
+        return "address-space-boundary";
+
+    case atari::DisplayListStopReason::
+        OneKilobyteBoundary:
+        return "1k-boundary";
+
+    case atari::DisplayListStopReason::LoopDetected:
+        return "loop";
+
+    case atari::DisplayListStopReason::InstructionLimit:
+        return "instruction-limit";
+
+    default:
+        return "?";
+    }
+}
+
+void PrintDisplayLists(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " ANTIC Display Lists\n"
+        << "=====================================\n";
+
+    if (analysis.displayLists.displayLists.empty())
+    {
+        std::cout << "  none\n";
+        return;
+    }
+
+    for (const auto& displayList :
+         analysis.displayLists.displayLists)
+    {
+        std::cout << "\n  LIST ";
+        PrintAddress(displayList.entryPoint);
+
+        std::cout
+            << std::dec
+            << "  instructions="
+            << displayList.instructions.size()
+            << " bytes="
+            << displayList.ByteCount()
+            << " stop="
+            << DisplayListStopReasonToString(
+                   displayList.stopReason)
+            << '\n';
+
+        for (const auto& instruction :
+             displayList.instructions)
+        {
+            std::cout << "    ";
+            PrintAddress(instruction.address);
+
+            std::cout
+                << "  $"
+                << std::uppercase
+                << std::hex
+                << std::setw(2)
+                << std::setfill('0')
+                << static_cast<unsigned>(
+                       instruction.opcode)
+                << "  "
+                << DisplayListInstructionKindToString(
+                       instruction.kind);
+
+            if (instruction.kind ==
+                atari::DisplayListInstructionKind::Blank)
+            {
+                std::cout
+                    << std::dec
+                    << " lines="
+                    << static_cast<unsigned>(
+                           instruction.blankScanLines);
+            }
+            else if (instruction.kind ==
+                     atari::DisplayListInstructionKind::ModeLine)
+            {
+                std::cout
+                    << std::hex
+                    << " mode=$"
+                    << static_cast<unsigned>(
+                           instruction.mode);
+
+                if (instruction.memoryScanAddress.has_value())
+                {
+                    std::cout << " lms=";
+                    PrintAddress(
+                        instruction.memoryScanAddress.value());
+                }
+
+                if (instruction.horizontalScroll)
+                {
+                    std::cout << " hscroll";
+                }
+
+                if (instruction.verticalScroll)
+                {
+                    std::cout << " vscroll";
+                }
+            }
+            else if (instruction.jumpAddress.has_value())
+            {
+                std::cout << " target=";
+                PrintAddress(
+                    instruction.jumpAddress.value());
+            }
+
+            if (instruction.displayListInterrupt)
+            {
+                std::cout << " dli";
+            }
+
+            if (instruction.reservedJumpModifier)
+            {
+                std::cout << " [reserved-jump-modifier]";
+            }
+
+            std::cout << '\n';
+        }
+    }
+
+    std::cout << "\n  Screen memory: ";
+    PrintAddressList(
+        analysis.displayLists.screenMemoryAddresses);
+    std::cout << '\n';
+}
+
+const char* CharacterSetLayoutToString(
+    atari::CharacterSetLayout layout)
+{
+    switch (layout)
+    {
+    case atari::CharacterSetLayout::Characters64:
+        return "64 characters / 512 bytes";
+
+    case atari::CharacterSetLayout::Characters128:
+        return "128 characters / 1024 bytes";
+
+    default:
+        return "?";
+    }
+}
+
+void PrintCharacterSets(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " ANTIC Character Sets\n"
+        << "=====================================\n";
+
+    if (analysis.characterSets.characterSets.empty())
+    {
+        std::cout << "  none\n";
+        return;
+    }
+
+    for (const auto& characterSet :
+         analysis.characterSets.characterSets)
+    {
+        std::cout << "  SET ";
+        PrintAddress(characterSet.baseAddress);
+
+        std::cout
+            << std::dec
+            << "  "
+            << CharacterSetLayoutToString(
+                   characterSet.layout)
+            << "  glyphs="
+            << characterSet.glyphs.size()
+            << "  initialized="
+            << characterSet.initializedByteCount
+            << '/'
+            << characterSet.ExpectedByteCount();
+
+        if (characterSet.Complete())
+        {
+            std::cout << "  [complete]";
+        }
+        else
+        {
+            std::cout << "  [incomplete]";
+        }
+
+        if (characterSet.addressSpaceTruncated)
+        {
+            std::cout << "  [address-space-boundary]";
+        }
+
+        std::cout << '\n';
+    }
+}
+
 // ============================================================
 // Relocation
 // ============================================================
@@ -2760,6 +2999,29 @@ int main(
         << "  Total instructions:       "
         << analysis.TotalInstructionCount()
         << '\n'
+        << "  ANTIC display lists:      "
+        << analysis.DisplayListCount()
+        << '\n'
+        << "  Complete display lists:   "
+        << analysis.CompleteDisplayListCount()
+        << '\n'
+        << "  Display-list instructions:"
+        << ' '
+        << analysis.DisplayListInstructionCount()
+        << '\n'
+        << "  Screen-memory references: "
+        << analysis.displayLists.
+               screenMemoryAddresses.size()
+        << '\n'
+        << "  Character sets:           "
+        << analysis.CharacterSetCount()
+        << '\n'
+        << "  Complete character sets:  "
+        << analysis.CompleteCharacterSetCount()
+        << '\n'
+        << "  Character glyphs:         "
+        << analysis.CharacterGlyphCount()
+        << '\n'
         << "  Cross references:         "
         << analysis.CrossReferenceCount()
         << '\n'
@@ -2884,6 +3146,12 @@ int main(
     // ========================================================
 
     PrintRelocationMap(
+        analysis);
+
+    PrintDisplayLists(
+        analysis);
+
+    PrintCharacterSets(
         analysis);
 
     PrintRoutines(

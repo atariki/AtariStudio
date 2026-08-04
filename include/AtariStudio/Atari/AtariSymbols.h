@@ -43,7 +43,7 @@ public:
 
 private:
 
-    inline static constexpr std::array<AtariSymbol, 173> s_symbols =
+    inline static constexpr std::array<AtariSymbol, 179> s_symbols =
     {{
         {0x0000, "LINZBS LINBUG STORAGE"},
         {0x0001, "NGFLAG"},
@@ -207,6 +207,9 @@ private:
 
         {0x0206, "VBREAK \"BRK\" VECTOR"},
         {0x022F, "SDMCTL SAVE DMACTL REGISTER"},
+        {0x0230, "SDLSTL DISPLAY LIST ADDRESS LOW"},
+        {0x0231, "SDLSTH DISPLAY LIST ADDRESS HIGH"},
+        {0x02F4, "CHBAS CHARACTER SET BASE SHADOW"},
         {0x02F8, "ROWINC"},
         {0x0306, "DTIMLO DEVICE TIME OUT IN 1 SEC. UNITS"},
         {0x0308, "DBYTLO BYTE COUNT"},
@@ -217,6 +220,9 @@ private:
 
         {0xD01A, "COLBK"},
         {0xD301, "PORTB"},
+        {0xD402, "DLISTL DISPLAY LIST ADDRESS LOW"},
+        {0xD403, "DLISTH DISPLAY LIST ADDRESS HIGH"},
+        {0xD409, "CHBASE CHARACTER SET BASE"},
         {0xD40E, "NMIEN"},
         {0xD40F, "NMIST"},
         {0xD800, "AFP"}

@@ -8,6 +8,7 @@
 
 #include <AtariStudio/Disassembler/BasicBlockAnalyzer.h>
 #include <AtariStudio/Disassembler/BranchConditionAnalyzer.h>
+#include <AtariStudio/Disassembler/CharacterSetAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeDataAnalyzer.h>
 #include <AtariStudio/Disassembler/CodeIslandAnalyzer.h>
 #include <AtariStudio/Disassembler/ConditionalRegionAnalyzer.h>
@@ -15,6 +16,7 @@
 #include <AtariStudio/Disassembler/ControlFlowGraph.h>
 #include <AtariStudio/Disassembler/DisassemblyListing.h>
 #include <AtariStudio/Disassembler/DisassemblyMetadata.h>
+#include <AtariStudio/Disassembler/DisplayListAnalyzer.h>
 #include <AtariStudio/Disassembler/DominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/FlagProducerAnalyzer.h>
 #include <AtariStudio/Disassembler/LoopConditionAnalyzer.h>
@@ -42,6 +44,10 @@ struct AnalysisEngineResult
     //
 
     ControlFlowAnalysisResult controlFlow;
+
+    DisplayListAnalysisResult displayLists;
+
+    CharacterSetAnalysisResult characterSets;
 
     DisassemblyMetadata metadata;
 
@@ -142,6 +148,42 @@ struct AnalysisEngineResult
             controlFlow
                 .instructionAddresses
                 .size();
+    }
+
+    [[nodiscard]]
+    std::size_t DisplayListCount() const noexcept
+    {
+        return displayLists.displayLists.size();
+    }
+
+    [[nodiscard]]
+    std::size_t DisplayListInstructionCount() const noexcept
+    {
+        return displayLists.InstructionCount();
+    }
+
+    [[nodiscard]]
+    std::size_t CompleteDisplayListCount() const noexcept
+    {
+        return displayLists.CompleteCount();
+    }
+
+    [[nodiscard]]
+    std::size_t CharacterSetCount() const noexcept
+    {
+        return characterSets.characterSets.size();
+    }
+
+    [[nodiscard]]
+    std::size_t CompleteCharacterSetCount() const noexcept
+    {
+        return characterSets.CompleteCount();
+    }
+
+    [[nodiscard]]
+    std::size_t CharacterGlyphCount() const noexcept
+    {
+        return characterSets.GlyphCount();
     }
 
     // --------------------------------------------------------
@@ -940,6 +982,42 @@ public:
             result.controlFlow,
             result.metadata,
             result.regions);
+
+        //
+        // =====================================================
+        // Phase 22
+        //
+        // Discover and decode ANTIC display lists from the OS
+        // shadow pointer and the hardware DLIST pointer.
+        // This analysis is read-only and preserves XEX segment
+        // metadata for repeatable analysis.
+        // =====================================================
+        //
+
+        DisplayListAnalyzer
+            displayListAnalyzer;
+
+        result.displayLists =
+            displayListAnalyzer.Analyze(
+                project.GetMemory());
+
+        //
+        // =====================================================
+        // Phase 23
+        //
+        // Decode character sets referenced through CHBAS or
+        // CHBASE. Display-list text modes determine whether the
+        // hardware uses a 64- or 128-character layout.
+        // =====================================================
+        //
+
+        CharacterSetAnalyzer
+            characterSetAnalyzer;
+
+        result.characterSets =
+            characterSetAnalyzer.Analyze(
+                project.GetMemory(),
+                result.displayLists);
 
         return result;
     }

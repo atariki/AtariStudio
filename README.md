@@ -12,6 +12,10 @@ analysis tool for Atari 8-bit XEX software.
   post-dominators, and natural-loop analysis;
 - branch/flag semantics and structured `if`, loop, and condition recovery;
 - structured expression building and readable pseudo-C generation;
+- ANTIC display-list discovery and decoding, including LMS screen-memory
+  references, scrolling flags, DLI, JMP, and JVB;
+- CHBASE/CHBAS character-set discovery with mode-aware 64- and
+  128-character glyph decoding;
 - relocation detection for common 6502 copy loops;
 - automated core, CPU, loader, CFG, and structured-output regressions.
 
@@ -110,6 +114,12 @@ Decoder regressions also cover operand fetches and positive or negative
 relative branches that cross the 16-bit address-space boundary, exact
 NMOS instruction/addressing-mode conformance for all 256 opcode values,
 and defensive formatting of externally supplied instruction records.
+Display-list regressions cover OS and ANTIC pointer discovery, blank and
+mode-line decoding, LMS addresses, JMP/JVB control flow, malformed operands,
+cycles, instruction limits, and ANTIC's 1 KiB display-list boundary.
+Character-set regressions cover CHBASE alignment, 512-byte and 1 KiB layouts,
+one-bit and two-bit glyph pixels, partial memory images, address-space bounds,
+and integration with decoded text-mode display lists.
 Deterministic arbitrary-input scenarios exercise analysis near every
 major address-space boundary and verify stable output and internal
 invariants. The complete native test suite is kept clean under MSVC
@@ -135,6 +145,6 @@ Studio.
 
 ## Roadmap
 
-Graphical viewers for display lists, charsets, screens, resources, and a
-plugin architecture remain future application-layer work. The current
+Graphical viewers for decoded display lists and charsets, screens, resources,
+and a plugin architecture remain future application-layer work. The current
 repository provides the analysis core and diagnostic CLI.

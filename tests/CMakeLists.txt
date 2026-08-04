@@ -62,6 +62,38 @@ add_test(
     COMMAND MemoryTests
 )
 
+add_executable(DisplayListTests
+    DisplayListTests.cpp
+)
+
+target_link_libraries(DisplayListTests
+    PRIVATE
+        AtariStudio
+)
+
+ataristudio_copy_asan_runtime(DisplayListTests)
+
+add_test(
+    NAME DisplayList
+    COMMAND DisplayListTests
+)
+
+add_executable(CharacterSetTests
+    CharacterSetTests.cpp
+)
+
+target_link_libraries(CharacterSetTests
+    PRIVATE
+        AtariStudio
+)
+
+ataristudio_copy_asan_runtime(CharacterSetTests)
+
+add_test(
+    NAME CharacterSet
+    COMMAND CharacterSetTests
+)
+
 add_executable(XexLoaderTests
     XexLoaderTests.cpp
 )
