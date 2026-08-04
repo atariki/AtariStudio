@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <deque>
 #include <string>
@@ -368,8 +367,9 @@ private:
     {
         std::vector<u16> members;
 
-        std::array<bool, MemorySize>
-            visited{};
+        std::vector<bool> visited(
+            MemorySize,
+            false);
 
         std::deque<u16>
             workList;

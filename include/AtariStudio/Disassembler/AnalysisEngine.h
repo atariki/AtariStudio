@@ -24,7 +24,11 @@
 #include <AtariStudio/Disassembler/PostDominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
 #include <AtariStudio/Disassembler/SemanticConditionAnalyzer.h>
+#include <AtariStudio/Disassembler/StructuredAnalysisResult.h>
+#include <AtariStudio/Disassembler/StructuredCodeGenerator.h>
+#include <AtariStudio/Disassembler/StructuredTranslationUnitGenerator.h>
 #include <AtariStudio/Disassembler/StructuredControlFlowAnalyzer.h>
+#include <AtariStudio/Disassembler/StructuredExpressionBuilder.h>
 
 namespace atari
 {
@@ -61,22 +65,6 @@ struct AnalysisEngineResult
     // ========================================================
     // Semantic condition analysis
     // ========================================================
-    //
-    // Converts processor flags into high-level expressions:
-    //
-    //     INX
-    //     BNE label
-    //
-    // becomes:
-    //
-    //     X != 0
-    //
-    //     CPY #$03
-    //     BNE label
-    //
-    // becomes:
-    //
-    //     Y != $03
     //
 
     SemanticConditionAnalysisResult semanticConditions;
@@ -116,6 +104,14 @@ struct AnalysisEngineResult
     LoopNestingAnalysisResult loopNesting;
 
     LoopStructureAnalysisResult loopStructures;
+
+    //
+    // ========================================================
+    // Structured expression analysis
+    // ========================================================
+    //
+
+    StructuredAnalysisResult structured;
 
     //
     // ========================================================
@@ -509,6 +505,26 @@ struct AnalysisEngineResult
     }
 
     // --------------------------------------------------------
+    // Structured expressions
+    // --------------------------------------------------------
+
+    [[nodiscard]]
+    std::size_t StructuredExpressionCount() const noexcept
+    {
+        return
+            structured
+                .ExpressionCount();
+    }
+
+    [[nodiscard]]
+    std::size_t StructuredStatementCount() const noexcept
+    {
+        return
+            structured
+                .StatementCount();
+    }
+
+    // --------------------------------------------------------
     // Listing
     // --------------------------------------------------------
 
@@ -520,6 +536,7 @@ struct AnalysisEngineResult
                 .RowCount();
     }
 };
+
 
 class AnalysisEngine
 {
@@ -682,16 +699,6 @@ public:
         // Phase 8
         //
         // Flag producer analysis.
-        //
-        // For every conditional branch:
-        //
-        //     BCC / BCS
-        //     BEQ / BNE
-        //     BMI / BPL
-        //     BVC / BVS
-        //
-        // find the previous instruction that produced the
-        // consumed C/Z/N/V processor flag.
         // =====================================================
         //
 
@@ -707,17 +714,16 @@ public:
         // =====================================================
         // Phase 9
         //
-        // Semantic condition analysis.
+        // Semantic condition reconstruction.
         //
-        // Lifts the flag producer found above into a
-        // high-level expression, e.g.:
+        // Examples:
         //
-        //     INX
-        //     BNE label
+        //     INX + BNE
+        //         -> X != 0
         //
-        // becomes:
+        //     CPY #$03 + BNE
+        //         -> Y != $03
         //
-        //     X != 0
         // =====================================================
         //
 
@@ -779,7 +785,7 @@ public:
         // =====================================================
         // Phase 13
         //
-        // Decode 6502 branch semantics for IF regions.
+        // Decode branch conditions.
         // =====================================================
         //
 
@@ -861,25 +867,6 @@ public:
         // Phase 18
         //
         // High-level loop reconstruction.
-        //
-        //     NaturalLoop
-        //          +
-        //     LoopCondition
-        //          +
-        //     LoopNesting
-        //
-        // becomes:
-        //
-        //     while (...)
-        //
-        //     do
-        //     {
-        //     }
-        //     while (...);
-        //
-        //     for (;;)
-        //
-        //     complex loop
         // =====================================================
         //
 
@@ -896,6 +883,54 @@ public:
         // =====================================================
         // Phase 19
         //
+        // Build high-level expression tree.
+        //
+        // Combines:
+        //
+        //     structured IFs
+        //     semantic branch conditions
+        //     structured loops
+        //
+        // =====================================================
+        //
+
+        StructuredExpressionBuilder
+            structuredExpressionBuilder;
+
+        result.structured.expressions =
+            structuredExpressionBuilder.Build(
+                project,
+                result.basicBlocks,
+                result.metadata,
+                result.structuredControlFlow,
+                result.semanticConditions,
+                result.loopStructures);
+
+        //
+        // =====================================================
+        // Phase 20
+        //
+        // Generate pseudo-C from the structured tree.
+        // =====================================================
+        //
+
+        StructuredCodeGenerator
+            structuredCodeGenerator;
+
+        result.structured.generatedCode =
+            structuredCodeGenerator.Generate(
+                result.structured.expressions);
+
+        result.structured.generatedTranslationUnit =
+            StructuredTranslationUnitGenerator{}
+                .Generate(
+                    project,
+                    result.structured.expressions);
+
+        //
+        // =====================================================
+        // Phase 21
+        //
         // Final disassembly listing.
         // =====================================================
         //
@@ -908,6 +943,7 @@ public:
 
         return result;
     }
+
 
 private:
 

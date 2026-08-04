@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -677,8 +676,9 @@ private:
 
         Disassembler disassembler;
 
-        std::array<bool, MemorySize>
-            visited{};
+        std::vector<bool> visited(
+            MemorySize,
+            false);
 
         std::deque<u16>
             workList;

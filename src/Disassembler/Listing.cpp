@@ -3,6 +3,7 @@
 #include <AtariStudio/Core/Memory.h>
 #include <AtariStudio/Disassembler/Disassembler.h>
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 
@@ -18,11 +19,15 @@ namespace atari
 
         Disassembler disassembler;
 
-        uint16_t pc = startAddress;
+        uint32_t pc = startAddress;
 
         while (pc <= endAddress)
         {
-            auto instruction = disassembler.Decode(memory, pc);
+            auto instruction =
+                disassembler.Decode(
+                    memory,
+                    static_cast<uint16_t>(
+                        pc));
 
             listing.push_back(instruction);
 
@@ -44,6 +49,11 @@ namespace atari
     {
         std::ostringstream stream;
 
+        const std::size_t byteCount =
+            std::min<std::size_t>(
+                instruction.length,
+                instruction.bytes.size());
+
         stream << std::uppercase
             << std::hex
             << std::setfill('0');
@@ -54,7 +64,7 @@ namespace atari
             << ": ";
 
         // Байты инструкции
-        for (std::size_t i = 0; i < instruction.length; ++i)
+        for (std::size_t i = 0; i < byteCount; ++i)
         {
             stream << std::setw(2)
                 << static_cast<unsigned>(instruction.bytes[i])
@@ -62,7 +72,9 @@ namespace atari
         }
 
         // Выравнивание поля байтов до 3 байт
-        for (std::size_t i = instruction.length; i < 3; ++i)
+        for (std::size_t i = byteCount;
+             i < instruction.bytes.size();
+             ++i)
         {
             stream << "   ";
         }

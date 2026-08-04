@@ -5,6 +5,7 @@
 #include <AtariStudio/Core/Segment.h>
 
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <utility>
 
@@ -122,8 +123,13 @@ bool XexLoader::Load(
         return false;
     }
 
+    auto loadedProject =
+        std::make_unique<Project>();
+
     auto& memory =
-        project.GetMemory();
+        loadedProject->GetMemory();
+
+    bool hasSegment = false;
 
     try
     {
@@ -192,12 +198,14 @@ bool XexLoader::Load(
 
             segment.overlapping =
                 OverlapsExistingSegment(
-                    project,
+                    *loadedProject,
                     segment.begin,
                     segment.end);
 
-            project.AddSegment(
+            loadedProject->AddSegment(
                 segment);
+
+            hasSegment = true;
 
             const uint32_t size =
                 static_cast<uint32_t>(
@@ -232,13 +240,19 @@ bool XexLoader::Load(
         return false;
     }
 
+    if (!hasSegment)
+    {
+        SetError("XEX file contains no segments.");
+        return false;
+    }
+
     //
     // RUNAD
     //
     if (memory.Cell(0x02E0).initialized &&
         memory.Cell(0x02E1).initialized)
     {
-        project.SetRunAddress(
+        loadedProject->SetRunAddress(
             memory.Read16(0x02E0));
     }
 
@@ -248,7 +262,7 @@ bool XexLoader::Load(
     if (memory.Cell(0x02E2).initialized &&
         memory.Cell(0x02E3).initialized)
     {
-        project.SetInitAddress(
+        loadedProject->SetInitAddress(
             memory.Read16(0x02E2));
     }
 
@@ -257,14 +271,18 @@ bool XexLoader::Load(
     // RUNAD / INITAD as code.
     //
     MarkCodeSegment(
-        project,
-        project.RunAddress(),
+        *loadedProject,
+        loadedProject->RunAddress(),
         "Main code");
 
     MarkCodeSegment(
-        project,
-        project.InitAddress(),
+        *loadedProject,
+        loadedProject->InitAddress(),
         "Init code");
+
+    project =
+        std::move(
+            *loadedProject);
 
     return true;
 }

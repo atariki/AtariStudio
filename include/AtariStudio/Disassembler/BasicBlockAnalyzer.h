@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -518,8 +517,9 @@ private:
         // Build blocks from leaders
         // =================================================
         //
-        std::array<bool, MemorySize>
-            consumed{};
+        std::vector<bool> consumed(
+            MemorySize,
+            false);
 
         for (const u16 leader :
              leaders)

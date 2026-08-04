@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <deque>
 #include <utility>
@@ -250,7 +249,9 @@ private:
         //
         constexpr std::size_t maximumInstructions = 256;
 
-        std::array<bool, MemorySize> visited{};
+        std::vector<bool> visited(
+            MemorySize,
+            false);
 
         std::deque<u16> workList;
 

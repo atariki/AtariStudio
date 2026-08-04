@@ -1,8 +1,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -15,6 +17,82 @@
 
 namespace
 {
+
+enum class OutputMode
+{
+    None,
+    EmitCpp,
+    EmitCppOnly
+};
+
+void PrintUsage(
+    std::ostream& stream)
+{
+    stream
+        << "Usage:\n"
+        << "  TestApp <file.xex>\n"
+        << "  TestApp <file.xex> --emit-cpp <file.cpp>\n"
+        << "  TestApp <file.xex> --emit-cpp-only <file.cpp>\n"
+        << "  TestApp --help\n";
+}
+
+bool PathsReferToSameFile(
+    const std::filesystem::path& left,
+    const std::filesystem::path& right)
+{
+    std::error_code error;
+
+    if (std::filesystem::exists(
+            left,
+            error) &&
+        !error &&
+        std::filesystem::exists(
+            right,
+            error) &&
+        !error)
+    {
+        const bool equivalent =
+            std::filesystem::equivalent(
+                left,
+                right,
+                error);
+
+        if (!error)
+        {
+            return equivalent;
+        }
+    }
+
+    std::error_code leftError;
+    std::error_code rightError;
+
+    const auto normalizedLeft =
+        std::filesystem::weakly_canonical(
+            left,
+            leftError);
+
+    const auto normalizedRight =
+        std::filesystem::weakly_canonical(
+            right,
+            rightError);
+
+    return
+        !leftError &&
+        !rightError &&
+        normalizedLeft == normalizedRight;
+}
+
+std::string PathForDisplay(
+    const std::filesystem::path& path)
+{
+    const auto utf8 =
+        path.u8string();
+
+    return std::string{
+        reinterpret_cast<const char*>(
+            utf8.data()),
+        utf8.size()};
+}
 
 // ============================================================
 // Segment helpers
@@ -2159,6 +2237,34 @@ void PrintStructuredLoops(
 }
 
 // ============================================================
+// Structured pseudo-C
+// ============================================================
+
+void PrintStructuredCode(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " Structured Pseudo-C\n"
+        << "=====================================\n";
+
+    const auto& code =
+        analysis.structured.GeneratedCode();
+
+    if (code.empty())
+    {
+        std::cout
+            << "\nNo structured code generated.\n";
+
+        return;
+    }
+
+    std::cout
+        << '\n'
+        << code;
+}
+
+// ============================================================
 // Listing
 // ============================================================
 
@@ -2310,39 +2416,132 @@ void PrintListing(
 // main
 // ============================================================
 
+#ifdef _WIN32
+int wmain(
+    int argc,
+    wchar_t* argv[])
+#else
 int main(
     int argc,
     char* argv[])
+#endif
 {
     std::cout
         << "=====================================\n"
         << " AtariStudio Test Application\n"
         << "=====================================\n\n";
 
+    if (argc == 2)
+    {
+        const std::filesystem::path firstArgument{
+            argv[1]};
+
+        if (firstArgument ==
+                std::filesystem::path{"--help"} ||
+            firstArgument ==
+                std::filesystem::path{"-h"})
+        {
+            PrintUsage(std::cout);
+            return 0;
+        }
+    }
+
     if (argc < 2)
     {
-        std::cout
-            << "Usage:\n"
-            << "  TestApp <file.xex>\n";
+        PrintUsage(std::cerr);
+        return 2;
+    }
 
-        return 1;
+    OutputMode outputMode =
+        OutputMode::None;
+
+    std::filesystem::path outputFilename;
+
+    if (argc >= 3)
+    {
+        const std::filesystem::path option{
+            argv[2]};
+
+        if (option ==
+            std::filesystem::path{"--emit-cpp"})
+        {
+            outputMode =
+                OutputMode::EmitCpp;
+        }
+        else if (option ==
+                 std::filesystem::path{
+                     "--emit-cpp-only"})
+        {
+            outputMode =
+                OutputMode::EmitCppOnly;
+        }
+        else
+        {
+            std::cerr
+                << "Unknown option: "
+                << PathForDisplay(option)
+                << '\n';
+
+            PrintUsage(std::cerr);
+            return 2;
+        }
+
+        if (argc < 4)
+        {
+            std::cerr
+                << "Missing output filename for "
+                << PathForDisplay(option)
+                << ".\n";
+
+            PrintUsage(std::cerr);
+            return 2;
+        }
+
+        if (argc > 4)
+        {
+            std::cerr
+                << "Unexpected extra argument: "
+                << PathForDisplay(
+                    std::filesystem::path{
+                        argv[4]})
+                << '\n';
+
+            PrintUsage(std::cerr);
+            return 2;
+        }
+
+        outputFilename =
+            argv[3];
     }
 
     const std::filesystem::path filename =
         argv[1];
 
-    atari::Project project;
+    if (outputMode != OutputMode::None &&
+        PathsReferToSameFile(
+            filename,
+            outputFilename))
+    {
+        std::cerr
+            << "Input and output filenames refer "
+            << "to the same file.\n";
+
+        return 1;
+    }
+
+    auto project =
+        std::make_unique<atari::Project>();
 
     atari::XexLoader loader;
 
     std::cout
         << "Loading XEX:\n"
-        << filename.string()
+        << PathForDisplay(filename)
         << "\n\n";
 
     if (!loader.Load(
             filename,
-            project))
+            *project))
     {
         std::cerr
             << "XEX load failed.\n"
@@ -2358,7 +2557,50 @@ int main(
 
     const auto analysis =
         analysisEngine.Analyze(
-            project);
+            *project);
+
+    if (outputMode != OutputMode::None)
+    {
+        std::ofstream output(
+            outputFilename,
+            std::ios::binary |
+                std::ios::trunc);
+
+        if (!output)
+        {
+            std::cerr
+                << "Cannot create translation unit: "
+                << PathForDisplay(outputFilename)
+                << '\n';
+
+            return 1;
+        }
+
+        output
+            << analysis.structured.
+                GeneratedTranslationUnit();
+
+        if (!output)
+        {
+            std::cerr
+                << "Cannot write translation unit: "
+                << PathForDisplay(outputFilename)
+                << '\n';
+
+            return 1;
+        }
+
+        std::cout
+            << "Generated C++ translation unit: "
+            << PathForDisplay(outputFilename)
+            << "\n\n";
+
+        if (outputMode ==
+            OutputMode::EmitCppOnly)
+        {
+            return 0;
+        }
+    }
 
     std::cout
         << "XEX loaded successfully.\n\n";
@@ -2368,7 +2610,7 @@ int main(
     // ========================================================
 
     const auto& segments =
-        project.Segments();
+        project->Segments();
 
     std::cout
         << "Segments:\n\n";
@@ -2426,10 +2668,10 @@ int main(
     std::cout
         << "\nRUN address:  ";
 
-    if (project.RunAddress() != 0)
+    if (project->RunAddress() != 0)
     {
         PrintAddress(
-            project.RunAddress());
+            project->RunAddress());
     }
     else
     {
@@ -2439,10 +2681,10 @@ int main(
     std::cout
         << "\nINIT address: ";
 
-    if (project.InitAddress() != 0)
+    if (project->InitAddress() != 0)
     {
         PrintAddress(
-            project.InitAddress());
+            project->InitAddress());
     }
     else
     {
@@ -2457,7 +2699,7 @@ int main(
 
     const auto statistics =
         atari::CalculateProjectStatistics(
-            project);
+            *project);
 
     std::cout
         << std::dec
@@ -2624,6 +2866,15 @@ int main(
         << "  Structured loop depth:    "
         << analysis.StructuredLoopMaximumDepth()
         << '\n'
+        << "  Structured expressions:   "
+        << analysis.StructuredExpressionCount()
+        << '\n'
+        << "  Structured statements:    "
+        << analysis.StructuredStatementCount()
+        << '\n'
+        << "  Structured code bytes:    "
+        << analysis.structured.GeneratedCode().size()
+        << '\n'
         << "  Listing rows:             "
         << analysis.ListingRowCount()
         << '\n';
@@ -2645,7 +2896,7 @@ int main(
         analysis);
 
     PrintFlagProducers(
-        project,
+        *project,
         analysis);
 
     PrintDominators(
@@ -2673,6 +2924,9 @@ int main(
         analysis);
 
     PrintStructuredLoops(
+        analysis);
+
+    PrintStructuredCode(
         analysis);
 
     PrintListing(

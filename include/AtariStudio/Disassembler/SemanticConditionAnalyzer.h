@@ -67,7 +67,7 @@ enum class SemanticConditionKind
     //
     // becomes:
     //
-    //     (A & mem[$D01F]) == 0
+    //     (A & memory[$D01F]) == 0
     //
     BitTest,
 
@@ -961,7 +961,7 @@ private:
         }
 
         return
-            "mem[" +
+            "memory[" +
             instruction.operand +
             "]";
     }

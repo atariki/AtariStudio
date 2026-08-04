@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cstdint>
 #include <deque>
 #include <vector>
@@ -45,7 +44,9 @@ public:
         result.relocation =
             relocationAnalyzer.Analyze(memory);
 
-        std::array<bool, MemorySize> scheduled{};
+        std::vector<bool> scheduled(
+            MemorySize,
+            false);
         std::deque<u16> workList;
 
         //
