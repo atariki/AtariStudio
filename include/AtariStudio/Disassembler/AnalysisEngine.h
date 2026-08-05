@@ -25,6 +25,8 @@
 #include <AtariStudio/Disassembler/NaturalLoopAnalyzer.h>
 #include <AtariStudio/Disassembler/PostDominatorAnalyzer.h>
 #include <AtariStudio/Disassembler/RoutineAnalyzer.h>
+#include <AtariStudio/Disassembler/ScreenMemoryAnalyzer.h>
+#include <AtariStudio/Disassembler/ScreenPixelRenderer.h>
 #include <AtariStudio/Disassembler/SemanticConditionAnalyzer.h>
 #include <AtariStudio/Disassembler/StructuredAnalysisResult.h>
 #include <AtariStudio/Disassembler/StructuredCodeGenerator.h>
@@ -48,6 +50,10 @@ struct AnalysisEngineResult
     DisplayListAnalysisResult displayLists;
 
     CharacterSetAnalysisResult characterSets;
+
+    ScreenMemoryAnalysisResult screens;
+
+    ScreenPixelRenderResult renderedScreens;
 
     DisassemblyMetadata metadata;
 
@@ -184,6 +190,42 @@ struct AnalysisEngineResult
     std::size_t CharacterGlyphCount() const noexcept
     {
         return characterSets.GlyphCount();
+    }
+
+    [[nodiscard]]
+    std::size_t ScreenCount() const noexcept
+    {
+        return screens.screens.size();
+    }
+
+    [[nodiscard]]
+    std::size_t CompleteScreenCount() const noexcept
+    {
+        return screens.CompleteCount();
+    }
+
+    [[nodiscard]]
+    std::size_t ScreenRowCount() const noexcept
+    {
+        return screens.RowCount();
+    }
+
+    [[nodiscard]]
+    std::size_t ScreenRenderCount() const noexcept
+    {
+        return renderedScreens.renders.size();
+    }
+
+    [[nodiscard]]
+    std::size_t CompleteScreenRenderCount() const noexcept
+    {
+        return renderedScreens.CompleteCount();
+    }
+
+    [[nodiscard]]
+    std::size_t RenderedPixelCount() const noexcept
+    {
+        return renderedScreens.PixelCount();
     }
 
     // --------------------------------------------------------
@@ -1018,6 +1060,42 @@ public:
             characterSetAnalyzer.Analyze(
                 project.GetMemory(),
                 result.displayLists);
+
+        //
+        // =====================================================
+        // Phase 24
+        //
+        // Reconstruct screen-memory rows from LMS addresses,
+        // ANTIC modes, DMACTL width, and horizontal scrolling.
+        // =====================================================
+        //
+
+        ScreenMemoryAnalyzer
+            screenMemoryAnalyzer;
+
+        result.screens =
+            screenMemoryAnalyzer.Analyze(
+                project.GetMemory(),
+                result.displayLists);
+
+        //
+        // =====================================================
+        // Phase 25
+        //
+        // Decode reconstructed screen bytes and character glyphs
+        // into palette-independent ANTIC pixel indices. Character
+        // color modifiers remain separate because DLI-driven color
+        // register changes are outside static memory analysis.
+        // =====================================================
+        //
+
+        ScreenPixelRenderer
+            screenPixelRenderer;
+
+        result.renderedScreens =
+            screenPixelRenderer.Render(
+                result.screens,
+                result.characterSets);
 
         return result;
     }

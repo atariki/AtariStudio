@@ -16,6 +16,10 @@ analysis tool for Atari 8-bit XEX software.
   references, scrolling flags, DLI, JMP, and JVB;
 - CHBASE/CHBAS character-set discovery with mode-aware 64- and
   128-character glyph decoding;
+- screen-memory reconstruction from LMS, ANTIC modes, DMACTL width,
+  horizontal scrolling, and the 4 KiB memory-scan counter;
+- palette-independent indexed-pixel rendering for ANTIC modes 2-F,
+  including character color modifiers and mode 3 descenders;
 - relocation detection for common 6502 copy loops;
 - automated core, CPU, loader, CFG, and structured-output regressions.
 
@@ -120,6 +124,11 @@ cycles, instruction limits, and ANTIC's 1 KiB display-list boundary.
 Character-set regressions cover CHBASE alignment, 512-byte and 1 KiB layouts,
 one-bit and two-bit glyph pixels, partial memory images, address-space bounds,
 and integration with decoded text-mode display lists.
+Screen-memory regressions cover mode geometry, narrow/normal/wide DMA,
+HSCROL fetch expansion, LMS sequencing, unresolved rows, and 4 KiB wrapping.
+Indexed-pixel renderer regressions cover bitmap and character modes,
+one-bit and two-bit decoding, double-height glyphs, mode 3 descenders,
+character color modifiers, missing character sets, and engine integration.
 Deterministic arbitrary-input scenarios exercise analysis near every
 major address-space boundary and verify stable output and internal
 invariants. The complete native test suite is kept clean under MSVC
@@ -145,6 +154,6 @@ Studio.
 
 ## Roadmap
 
-Graphical viewers for decoded display lists and charsets, screens, resources,
+Graphical viewers for decoded display lists, charsets, and screens, resources,
 and a plugin architecture remain future application-layer work. The current
 repository provides the analysis core and diagnostic CLI.

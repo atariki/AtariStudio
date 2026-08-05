@@ -94,6 +94,38 @@ add_test(
     COMMAND CharacterSetTests
 )
 
+add_executable(ScreenMemoryTests
+    ScreenMemoryTests.cpp
+)
+
+target_link_libraries(ScreenMemoryTests
+    PRIVATE
+        AtariStudio
+)
+
+ataristudio_copy_asan_runtime(ScreenMemoryTests)
+
+add_test(
+    NAME ScreenMemory
+    COMMAND ScreenMemoryTests
+)
+
+add_executable(ScreenPixelRendererTests
+    ScreenPixelRendererTests.cpp
+)
+
+target_link_libraries(ScreenPixelRendererTests
+    PRIVATE
+        AtariStudio
+)
+
+ataristudio_copy_asan_runtime(ScreenPixelRendererTests)
+
+add_test(
+    NAME ScreenPixelRenderer
+    COMMAND ScreenPixelRendererTests
+)
+
 add_executable(XexLoaderTests
     XexLoaderTests.cpp
 )

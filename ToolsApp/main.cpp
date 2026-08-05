@@ -708,6 +708,227 @@ void PrintCharacterSets(
     }
 }
 
+const char* PlayfieldWidthToString(
+    atari::PlayfieldWidth width)
+{
+    switch (width)
+    {
+    case atari::PlayfieldWidth::Disabled:
+        return "disabled";
+
+    case atari::PlayfieldWidth::Narrow:
+        return "narrow";
+
+    case atari::PlayfieldWidth::Normal:
+        return "normal";
+
+    case atari::PlayfieldWidth::Wide:
+        return "wide";
+
+    default:
+        return "?";
+    }
+}
+
+void PrintScreenMemory(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " ANTIC Screen Memory\n"
+        << "=====================================\n";
+
+    if (analysis.screens.screens.empty())
+    {
+        std::cout << "  none\n";
+        return;
+    }
+
+    for (const auto& screen :
+         analysis.screens.screens)
+    {
+        std::cout << "\n  SCREEN display-list=";
+        PrintAddress(
+            screen.displayListEntryPoint);
+
+        std::cout
+            << std::dec
+            << " width="
+            << PlayfieldWidthToString(
+                   screen.playfieldWidth)
+            << " rows="
+            << screen.rows.size()
+            << " scan-lines="
+            << screen.nominalScanLineCount
+            << " bytes="
+            << screen.displayByteCount
+            << " initialized="
+            << screen.initializedByteCount
+            << " wraps="
+            << screen.memoryScanWrapCount;
+
+        if (screen.Complete())
+        {
+            std::cout << " [complete]";
+        }
+        else
+        {
+            std::cout << " [incomplete]";
+        }
+
+        std::cout << '\n';
+
+        for (const auto& row : screen.rows)
+        {
+            std::cout << "    DL ";
+            PrintAddress(
+                row.displayListInstructionAddress);
+
+            std::cout
+                << std::dec
+                << " y="
+                << row.firstNominalScanLine
+                << " lines="
+                << row.nominalScanLineCount
+                << std::hex
+                << " mode=$"
+                << static_cast<unsigned>(row.mode)
+                << " screen=";
+
+            if (row.screenAddress.has_value())
+            {
+                PrintAddress(
+                    row.screenAddress.value());
+            }
+            else
+            {
+                std::cout << "unresolved";
+            }
+
+            std::cout
+                << std::dec
+                << " bytes="
+                << row.byteCount
+                << " initialized="
+                << row.initializedByteCount;
+
+            if (row.loadMemoryScan)
+            {
+                std::cout << " lms";
+            }
+
+            if (row.horizontalScroll)
+            {
+                std::cout << " hscroll";
+            }
+
+            if (row.verticalScroll)
+            {
+                std::cout << " vscroll";
+            }
+
+            if (row.memoryScanWrapped)
+            {
+                std::cout << " [4k-wrap]";
+            }
+
+            std::cout << '\n';
+        }
+    }
+}
+
+void PrintScreenPixelRenders(
+    const atari::AnalysisEngineResult& analysis)
+{
+    std::cout
+        << "\n=====================================\n"
+        << " ANTIC Indexed-Pixel Renders\n"
+        << "=====================================\n";
+
+    if (analysis.renderedScreens.renders.empty())
+    {
+        std::cout << "  none\n";
+        return;
+    }
+
+    for (const auto& render :
+         analysis.renderedScreens.renders)
+    {
+        std::cout << "\n  RENDER display-list=";
+        PrintAddress(render.displayListEntryPoint);
+
+        std::cout
+            << std::dec
+            << " width="
+            << PlayfieldWidthToString(
+                   render.playfieldWidth)
+            << " rows="
+            << render.modeLines.size()
+            << " pixels="
+            << render.PixelCount()
+            << " initialized="
+            << render.InitializedPixelCount();
+
+        if (render.characterSet64Base.has_value())
+        {
+            std::cout << " charset64=";
+            PrintAddress(
+                render.characterSet64Base.value());
+        }
+
+        if (render.characterSet128Base.has_value())
+        {
+            std::cout << " charset128=";
+            PrintAddress(
+                render.characterSet128Base.value());
+        }
+
+        std::cout
+            << (render.Complete()
+                    ? " [complete]\n"
+                    : " [incomplete]\n");
+
+        for (const auto& modeLine : render.modeLines)
+        {
+            std::cout << "    DL ";
+            PrintAddress(
+                modeLine.displayListInstructionAddress);
+
+            std::cout
+                << std::hex
+                << " mode=$"
+                << static_cast<unsigned>(modeLine.mode)
+                << std::dec
+                << " scan-lines="
+                << modeLine.scanLines.size()
+                << " pixels="
+                << modeLine.PixelCount()
+                << " initialized="
+                << modeLine.InitializedPixelCount()
+                << " bpp="
+                << modeLine.bitsPerPixel
+                << " x-scale="
+                << modeLine.horizontalPixelScale;
+
+            if (modeLine.characterSetRequired &&
+                !modeLine.characterSetResolved)
+            {
+                std::cout << " [charset-unresolved]";
+            }
+
+            if (!modeLine.sourceRowResolved)
+            {
+                std::cout << " [screen-unresolved]";
+            }
+
+            std::cout
+                << (modeLine.Complete()
+                        ? " [complete]\n"
+                        : " [incomplete]\n");
+        }
+    }
+}
+
 // ============================================================
 // Relocation
 // ============================================================
@@ -3022,6 +3243,24 @@ int main(
         << "  Character glyphs:         "
         << analysis.CharacterGlyphCount()
         << '\n'
+        << "  Reconstructed screens:    "
+        << analysis.ScreenCount()
+        << '\n'
+        << "  Complete screens:         "
+        << analysis.CompleteScreenCount()
+        << '\n'
+        << "  Screen mode rows:         "
+        << analysis.ScreenRowCount()
+        << '\n'
+        << "  Indexed render variants:  "
+        << analysis.ScreenRenderCount()
+        << '\n'
+        << "  Complete pixel renders:   "
+        << analysis.CompleteScreenRenderCount()
+        << '\n'
+        << "  Rendered indexed pixels:  "
+        << analysis.RenderedPixelCount()
+        << '\n'
         << "  Cross references:         "
         << analysis.CrossReferenceCount()
         << '\n'
@@ -3152,6 +3391,12 @@ int main(
         analysis);
 
     PrintCharacterSets(
+        analysis);
+
+    PrintScreenMemory(
+        analysis);
+
+    PrintScreenPixelRenders(
         analysis);
 
     PrintRoutines(

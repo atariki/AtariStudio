@@ -43,7 +43,7 @@ public:
 
 private:
 
-    inline static constexpr std::array<AtariSymbol, 179> s_symbols =
+    inline static constexpr std::array<AtariSymbol, 180> s_symbols =
     {{
         {0x0000, "LINZBS LINBUG STORAGE"},
         {0x0001, "NGFLAG"},
@@ -220,6 +220,7 @@ private:
 
         {0xD01A, "COLBK"},
         {0xD301, "PORTB"},
+        {0xD400, "DMACTL DMA CONTROL"},
         {0xD402, "DLISTL DISPLAY LIST ADDRESS LOW"},
         {0xD403, "DLISTH DISPLAY LIST ADDRESS HIGH"},
         {0xD409, "CHBASE CHARACTER SET BASE"},

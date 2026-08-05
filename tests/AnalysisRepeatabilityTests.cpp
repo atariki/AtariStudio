@@ -359,6 +359,176 @@ std::string SerializeCharacterSets(
     return stream.str();
 }
 
+std::string SerializeScreens(
+    const atari::ScreenMemoryAnalysisResult& analysis)
+{
+    std::ostringstream stream;
+
+    for (const auto width :
+         analysis.playfieldWidths)
+    {
+        stream
+            << "width:"
+            << static_cast<int>(width)
+            << '\n';
+    }
+
+    for (const auto& screen : analysis.screens)
+    {
+        stream
+            << "screen:"
+            << screen.displayListEntryPoint
+            << ':'
+            << static_cast<int>(screen.playfieldWidth)
+            << ':'
+            << screen.nominalScanLineCount
+            << ':'
+            << screen.displayByteCount
+            << ':'
+            << screen.initializedByteCount
+            << ':'
+            << screen.unresolvedRowCount
+            << ':'
+            << screen.memoryScanWrapCount
+            << ':'
+            << screen.displayListComplete
+            << '\n';
+
+        for (const auto& row : screen.rows)
+        {
+            stream
+                << row.displayListInstructionAddress
+                << ':'
+                << static_cast<unsigned>(row.mode)
+                << ':'
+                << row.firstNominalScanLine
+                << ':'
+                << row.nominalScanLineCount
+                << ':';
+
+            if (row.screenAddress.has_value())
+            {
+                stream << row.screenAddress.value();
+            }
+
+            stream
+                << ':'
+                << row.byteCount
+                << ':'
+                << row.initializedByteCount
+                << ':'
+                << row.horizontalScroll
+                << ':'
+                << row.verticalScroll
+                << ':'
+                << row.loadMemoryScan
+                << ':'
+                << row.memoryScanWrapped
+                << ':';
+
+            for (const auto byte : row.bytes)
+            {
+                stream
+                    << static_cast<unsigned>(byte)
+                    << ',';
+            }
+
+            stream << ':';
+
+            for (const bool initialized :
+                 row.initialized)
+            {
+                stream << initialized;
+            }
+
+            stream << '\n';
+        }
+    }
+
+    return stream.str();
+}
+
+std::string SerializeScreenPixelRenders(
+    const atari::ScreenPixelRenderResult& analysis)
+{
+    std::ostringstream stream;
+
+    for (const auto& render : analysis.renders)
+    {
+        stream
+            << "render:"
+            << render.displayListEntryPoint
+            << ':'
+            << static_cast<int>(render.playfieldWidth)
+            << ':';
+
+        if (render.characterSet64Base.has_value())
+        {
+            stream << render.characterSet64Base.value();
+        }
+
+        stream << ':';
+
+        if (render.characterSet128Base.has_value())
+        {
+            stream << render.characterSet128Base.value();
+        }
+
+        stream
+            << ':'
+            << render.unresolvedModeLineCount
+            << ':'
+            << render.sourceScreenComplete
+            << '\n';
+
+        for (const auto& modeLine : render.modeLines)
+        {
+            stream
+                << "line:"
+                << modeLine.displayListInstructionAddress
+                << ':'
+                << static_cast<unsigned>(modeLine.mode)
+                << ':'
+                << modeLine.horizontalPixelScale
+                << ':'
+                << modeLine.bitsPerPixel
+                << ':'
+                << modeLine.characterSetRequired
+                << ':'
+                << modeLine.characterSetResolved
+                << ':'
+                << modeLine.sourceRowResolved
+                << '\n';
+
+            for (const auto& scanLine :
+                 modeLine.scanLines)
+            {
+                stream
+                    << "scan:"
+                    << scanLine.nominalScanLine
+                    << ':';
+
+                for (const auto& pixel :
+                     scanLine.pixels)
+                {
+                    stream
+                        << static_cast<unsigned>(pixel.value)
+                        << ','
+                        << static_cast<unsigned>(
+                               pixel.characterModifier)
+                        << ','
+                        << pixel.initialized
+                        << ';';
+                }
+
+                stream << '\n';
+            }
+        }
+    }
+
+    return stream.str();
+}
+
 bool SameAnalysis(
     const atari::AnalysisEngineResult& left,
     const atari::AnalysisEngineResult& right)
@@ -390,6 +560,20 @@ bool SameAnalysis(
             right.CharacterGlyphCount() &&
         SerializeCharacterSets(left.characterSets) ==
             SerializeCharacterSets(right.characterSets) &&
+        left.ScreenCount() ==
+            right.ScreenCount() &&
+        left.ScreenRowCount() ==
+            right.ScreenRowCount() &&
+        SerializeScreens(left.screens) ==
+            SerializeScreens(right.screens) &&
+        left.ScreenRenderCount() ==
+            right.ScreenRenderCount() &&
+        left.RenderedPixelCount() ==
+            right.RenderedPixelCount() &&
+        SerializeScreenPixelRenders(
+            left.renderedScreens) ==
+        SerializeScreenPixelRenders(
+            right.renderedScreens) &&
         left.CrossReferenceCount() ==
             right.CrossReferenceCount() &&
         left.RoutineCount() ==
